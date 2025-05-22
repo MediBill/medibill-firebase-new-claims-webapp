@@ -102,6 +102,11 @@ export const getColumns = (
     header: ({ column }) => <DataTableColumnHeader column={column} title="Treating Surgeon" />,
   },
   {
+    accessorKey: "doctor_acc_no",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Doctor Acc No" />,
+    cell: ({ row }) => <div>{row.getValue("doctor_acc_no")}</div>,
+  },
+  {
     accessorKey: "service_date",
     header: ({ column }) => <DataTableColumnHeader column={column} title="Service Date" />,
     cell: ({ row }) => {
@@ -112,14 +117,6 @@ export const getColumns = (
       } catch (error) {
         return date as string; 
       }
-    },
-  },
-  {
-    accessorKey: "icd10_codes",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="ICD10 Codes" />,
-    cell: ({ row }) => {
-      const codes = row.getValue("icd10_codes") as string[];
-      return <div className="truncate max-w-[150px]">{codes?.join(', ') || 'N/A'}</div>;
     },
   },
   {
@@ -165,3 +162,4 @@ export const getColumns = (
     },
   },
 ];
+
