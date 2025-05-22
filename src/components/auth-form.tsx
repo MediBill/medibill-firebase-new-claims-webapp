@@ -12,11 +12,12 @@ import type { AuthToken } from '@/types/medibill';
 
 interface AuthFormProps {
   onLoginSuccess: (token: AuthToken) => void;
-  loginApiCall: (password: string) => Promise<AuthToken>;
+  loginApiCall: (email: string, password: string) => Promise<AuthToken>;
 }
 
 export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
-  const [password, setPassword] = useState('password123'); // Default password for convenience
+  const [email, setEmail] = useState('medibill.developer@gmail.com'); // Default email for convenience
+  const [password, setPassword] = useState('apt@123!'); // Default password for convenience
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,7 +26,7 @@ export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
     setIsLoading(true);
     setError(null);
     try {
-      const authToken = await loginApiCall(password);
+      const authToken = await loginApiCall(email, password);
       onLoginSuccess(authToken);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed');
@@ -40,11 +41,23 @@ export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
         <CardHeader>
           {/* <CardTitle className="text-2xl text-center">MediBill API Login</CardTitle> */}
           <CardDescription className="text-center pt-4"> {/* Added padding-top for spacing */}
-            Enter the default password to access case data.
+            Enter your credentials to access case data.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={isLoading}
+                placeholder="you@example.com"
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input
@@ -68,4 +81,3 @@ export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
     </div>
   );
 }
-

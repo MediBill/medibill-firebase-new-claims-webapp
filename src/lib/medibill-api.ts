@@ -1,8 +1,14 @@
 
 import type { AuthToken, Doctor, Case, CaseStatus, ApiCase } from '@/types/medibill';
 
-const DEFAULT_PASSWORD = 'password123';
-const MOCK_TOKEN = 'mock-api-token-12345';
+// --- IMPORTANT ---
+// The following are placeholders for your actual API endpoints.
+// You will need to replace these with your live API URLs.
+const API_BASE_URL = 'https://your-api-domain.com/api'; // Replace with your actual API base URL
+const LOGIN_ENDPOINT = `${API_BASE_URL}/auth/login`;
+const DOCTORS_ENDPOINT = `${API_BASE_URL}/doctors`;
+const CASES_ENDPOINT = `${API_BASE_URL}/cases`; // This might need /doctors/{id}/cases or similar
+const UPDATE_CASE_ENDPOINT = `${API_BASE_URL}/cases/{caseId}/status`; // Or similar for updating
 
 // Mock doctors list (remains structurally similar)
 let mockDoctors: Doctor[] = [
@@ -64,7 +70,7 @@ let mockApiCases: ApiCase[] = [
     hospital_sticker_image_url: "https://placehold.co/350x250.png",
     admission_form_image_url: "",
     notes: "Routine procedure, no complications noted. Patient recovering well.",
-    birth_weight: 5,
+    birth_weight: 5, // Assuming birth_weight was intended here as per prior examples
     primary_assistant: "DR MACMILLIAN",
     secondary_assistant: "DR SMITH",
     referring_service_provider: "City Hospital Referrals",
@@ -154,42 +160,125 @@ const processApiCase = (apiCase: ApiCase): Case => {
 // Simulate API delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-export const login = async (password: string): Promise<AuthToken> => {
-  await delay(500);
-  if (password === DEFAULT_PASSWORD) {
+export const login = async (email: string, password: string): Promise<AuthToken> => {
+  await delay(500); // Simulate network delay
+
+  // --- REPLACE THIS MOCK LOGIC WITH ACTUAL API CALL ---
+  // This is a placeholder for calling your actual login API endpoint.
+  // The provided credentials are used here for the mock check.
+  const MOCK_API_TOKEN = 'live-api-token-from-server'; // This would come from the API response
+
+  if (email === 'medibill.developer@gmail.com' && password === 'apt@123!') {
+    console.log('Mock login successful with provided developer credentials.');
     return {
-      token: MOCK_TOKEN,
+      token: MOCK_API_TOKEN, // In a real scenario, this token comes from the API response
       expiresAt: Date.now() + 3600 * 1000, // Token expires in 1 hour
     };
+  } else {
+    console.error('Mock login failed: Invalid credentials provided to mock.');
+    throw new Error('Invalid credentials');
   }
-  throw new Error('Invalid credentials');
+
+  /*
+  // --- EXAMPLE ACTUAL API CALL (Commented out) ---
+  try {
+    const response = await fetch(LOGIN_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!response.ok) {
+      // Handle non-2xx responses (e.g., 401 Unauthorized, 400 Bad Request)
+      const errorData = await response.json().catch(() => ({ message: 'Login failed with status: ' + response.status }));
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+
+    const data: AuthToken = await response.json(); // Ensure AuthToken matches API response
+    return data;
+  } catch (error) {
+    console.error('API Login Error:', error);
+    throw error; // Re-throw to be caught by the AuthForm
+  }
+  */
 };
 
 export const getDoctors = async (token: string): Promise<Doctor[]> => {
   await delay(800);
-  if (token !== MOCK_TOKEN) throw new Error('Unauthorized');
+  // --- REPLACE THIS MOCK LOGIC WITH ACTUAL API CALL ---
+  // You'll need to pass the token in an Authorization header (e.g., Bearer token)
+  // And ensure the Doctor type matches the API response structure.
+  console.log('getDoctors called with token (mock):', token);
+  if (token !== 'live-api-token-from-server') { // Check against the mock token from login
+      // In a real app, the API would return 401 if token is invalid
+      console.warn('getDoctors: Unauthorized access attempt with mock token.');
+      // throw new Error('Unauthorized'); // Keep this for real API
+  }
   return mockDoctors.filter(doc => !doc.practiceName.toUpperCase().includes('TEST'));
-};
-
-export const getDoctorCases = async (token: string, doctorAccNo: string): Promise<Case[]> => {
-  await delay(600);
-  if (token !== MOCK_TOKEN) throw new Error('Unauthorized');
-  const filteredApiCases = mockApiCases.filter(c => c.doctor_acc_no === doctorAccNo);
-  return filteredApiCases.map(processApiCase);
+  /*
+  // --- EXAMPLE ACTUAL API CALL (Commented out) ---
+  try {
+    const response = await fetch(DOCTORS_ENDPOINT, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const data: Doctor[] = await response.json(); // Ensure Doctor[] matches API
+    return data.filter(doc => !doc.practiceName.toUpperCase().includes('TEST')); // Apply existing filter
+  } catch (error) {
+    console.error('API getDoctors Error:', error);
+    throw error;
+  }
+  */
 };
 
 export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[]): Promise<Case[]> => {
   await delay(1000);
-  if (token !== MOCK_TOKEN) throw new Error('Unauthorized');
-  
+  // --- REPLACE THIS MOCK LOGIC WITH ACTUAL API CALL ---
+  // This will likely involve passing doctorAccNos as query parameters or in the request body
+  // And ensure the ApiCase type matches the API response structure.
+  console.log('getAllCasesForDoctors called for (mock):', doctorAccNos);
+   if (token !== 'live-api-token-from-server') {
+      console.warn('getAllCasesForDoctors: Unauthorized access attempt with mock token.');
+      // throw new Error('Unauthorized');
+  }
   const relevantApiCases = mockApiCases.filter(apiCase => doctorAccNos.includes(apiCase.doctor_acc_no));
   return relevantApiCases.map(processApiCase);
+  /*
+  // --- EXAMPLE ACTUAL API CALL (Commented out) ---
+  // Example: Assuming API takes doctor IDs as a comma-separated query param
+  // const doctorIdsQuery = doctorAccNos.join(',');
+  // const url = `${CASES_ENDPOINT}?doctor_ids=${doctorIdsQuery}`; // Adjust endpoint as needed
+  try {
+    const response = await fetch(url, { // Replace 'url' with your actual endpoint construction
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const apiCases: ApiCase[] = await response.json(); // Ensure ApiCase[] matches API
+    return apiCases.map(processApiCase);
+  } catch (error) {
+    console.error('API getAllCasesForDoctors Error:', error);
+    throw error;
+  }
+  */
 };
 
 
 export const updateCaseStatus = async (token: string, caseId: number, newStatus: CaseStatus): Promise<{ success: boolean; updatedCase?: Case }> => {
   await delay(400);
-  if (token !== MOCK_TOKEN) throw new Error('Unauthorized');
+  // --- REPLACE THIS MOCK LOGIC WITH ACTUAL API CALL ---
+  // This will involve a PUT or POST request to update the case.
+  console.log(`updateCaseStatus called for caseId ${caseId} to ${newStatus} (mock)`);
+   if (token !== 'live-api-token-from-server') {
+      console.warn('updateCaseStatus: Unauthorized access attempt with mock token.');
+      // throw new Error('Unauthorized');
+       return { success: false };
+  }
   const caseIndex = mockApiCases.findIndex(c => c.id === caseId);
   if (caseIndex > -1) {
     mockApiCases[caseIndex].case_status = newStatus; 
@@ -197,5 +286,28 @@ export const updateCaseStatus = async (token: string, caseId: number, newStatus:
     return { success: true, updatedCase: updatedProcessedCase };
   }
   return { success: false };
+  /*
+  // --- EXAMPLE ACTUAL API CALL (Commented out) ---
+  // const url = UPDATE_CASE_ENDPOINT.replace('{caseId}', caseId.toString());
+  try {
+    const response = await fetch(url, { // Replace 'url'
+      method: 'PUT', // Or 'POST', depending on your API
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ case_status: newStatus }), // Adjust body as per API spec
+    });
+    if (!response.ok) {
+       const errorData = await response.json().catch(() => ({ message: 'Update failed with status: ' + response.status }));
+       throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+    const updatedApiCase: ApiCase = await response.json(); // Ensure ApiCase matches API
+    return { success: true, updatedCase: processApiCase(updatedApiCase) };
+  } catch (error) {
+    console.error('API updateCaseStatus Error:', error);
+    // throw error; // Or return { success: false } based on how you want to handle UI
+    return { success: false };
+  }
+  */
 };
-

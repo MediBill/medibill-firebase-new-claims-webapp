@@ -5,7 +5,7 @@ import type * as React from 'react';
 import { useState, useEffect } from 'react';
 import { AuthForm } from '@/components/auth-form';
 import { DoctorCaseTable } from '@/components/doctor-case-table';
-import { login as apiLogin, getDoctors, getAllCasesForDoctors, updateCaseStatus as apiUpdateCaseStatus } from '@/lib/medibill-api';
+import { login as apiLoginReal, getDoctors, getAllCasesForDoctors, updateCaseStatus as apiUpdateCaseStatus } from '@/lib/medibill-api';
 import type { AuthToken, Doctor, Case, CaseStatus } from '@/types/medibill'; // Case is now the processed type
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -28,6 +28,11 @@ export default function MediBillPage() {
     setAuthToken(token);
     setError(null);
     fetchData(token.token);
+  };
+
+  // Wrapper for the API login call to match AuthForm's expected signature
+  const apiLogin = async (email: string, password: string): Promise<AuthToken> => {
+    return apiLoginReal(email, password);
   };
 
   const fetchData = async (token: string) => {
@@ -68,7 +73,7 @@ export default function MediBillPage() {
     return (
       <AuthForm
         onLoginSuccess={handleLoginSuccess}
-        loginApiCall={apiLogin}
+        loginApiCall={apiLogin} // Pass the updated apiLogin wrapper
       />
     );
   }
