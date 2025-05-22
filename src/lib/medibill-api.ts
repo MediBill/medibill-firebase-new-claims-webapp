@@ -12,7 +12,7 @@ let mockDoctors: Doctor[] = [
   { id: 'MAC', name: 'DR MACMILLIAN', practiceName: 'Advanced Cardiology', specialty: 'Cardiology'},
 ];
 
-// Updated mock cases based on the new structure
+// Updated mock cases based on the new structure and user-provided example
 let mockApiCases: ApiCase[] = [
   {
     id: 1,
@@ -26,22 +26,22 @@ let mockApiCases: ApiCase[] = [
     end_time: "12:30",
     icd10_codes: ["A00", "A00.0", "A00.1"],
     procedure_codes: ["0718", "1083", "1084"],
-    consultations: ["0151 [pre-op (10-20mins)]", "0173 [first hospital consult (< 15mins)]"],
-    ortho_modifiers: ["5441 [any other bones]"],
-    procedures: ["0026 [one lung ventilation]"],
-    modifiers: ["0032 [position]"],
+    consultations: ["0151 [pre-op (10-20mins)]", "0173 [first hospital consult (< 15mins)]", "0145 [away non-emergency consult]"],
+    ortho_modifiers: ["5441 [any other bones]", "5444 [shaft of femur]", "5448 [sternum and/or ribs]"],
+    procedures: ["0026 [one lung ventilation]", "1141 [intercostal drain]", "1780 [gastric intubation]"],
+    modifiers: ["0032 [position]", "0043 [age > 70yrs or age <1 year]", "0044 [neonates < 28d]"],
     bp_start_time: "11:00",
     bp_end_time: "14:00",
-    hospital_sticker_image_url: "",
-    admission_form_image_url: "",
-    notes: "Patient reported feeling unwell post-op.",
-    birth_weight: null, // Example: adult patient
+    hospital_sticker_image_url: "https://placehold.co/300x200.png", // Added placeholder
+    admission_form_image_url: "https://placehold.co/300x220.png", // Added placeholder
+    notes: "Patient reported feeling unwell post-op. This is an extended note to test wrapping and display within the detail sheet. It might contain multiple lines.",
+    birth_weight: 5, // Updated as per user example
     primary_assistant: "DR MACMILLIAN",
     secondary_assistant: "",
     referring_service_provider: "General practitioners INC",
-    referred_by_icd10: ["A00"],
+    referred_by_icd10: ["A00", "A00.0", "A00.1"],
     asa_level: 3,
-    case_status: "NEW" // Explicitly NEW
+    case_status: "NEW"
   },
   {
     id: 2,
@@ -53,24 +53,24 @@ let mockApiCases: ApiCase[] = [
     service_date: "2024-03-09",
     start_time: "11:00",
     end_time: "14:30",
-    icd10_codes: ["B01", "B01.0"],
-    procedure_codes: ["0822"],
-    consultations: ["0151 [pre-op (10-20mins)]"],
-    ortho_modifiers: [],
-    procedures: ["1141 [intercostal drain]"],
-    modifiers: ["0043 [age > 70yrs or age <1 year]"],
+    icd10_codes: ["B01", "B01.0"], // Kept some variety from previous
+    procedure_codes: ["0822"], // Kept some variety
+    consultations: ["0151 [pre-op (10-20mins)]", "0173 [first hospital consult (< 15mins)]"], // Updated
+    ortho_modifiers: ["5441 [any other bones]"], // Updated
+    procedures: ["0026 [one lung ventilation]", "1141 [intercostal drain]"], // Updated
+    modifiers: ["0032 [position]", "0043 [age > 70yrs or age <1 year]"], // Updated
     bp_start_time: "14:00",
     bp_end_time: "16:00",
-    hospital_sticker_image_url: "https://placehold.co/300x200.png",
-    admission_form_image_url: "https://placehold.co/300x200.png",
-    notes: "Routine procedure, no complications.",
-    birth_weight: null,
+    hospital_sticker_image_url: "https://placehold.co/350x250.png", // Changed placeholder
+    admission_form_image_url: "", // Example of one empty URL
+    notes: "Routine procedure, no complications noted. Patient recovering well.",
+    birth_weight: 5, // Updated as per user example
     primary_assistant: "DR MACMILLIAN",
-    secondary_assistant: "DR SMITH",
+    secondary_assistant: "DR SMITH", // Kept variety
     referring_service_provider: "City Hospital Referrals",
-    referred_by_icd10: ["B01"],
+    referred_by_icd10: ["B01"], // Kept variety
     asa_level: 2,
-    case_status: "PROCESSED" // Explicitly PROCESSED
+    case_status: "PROCESSED"
   },
   {
     id: 3,
@@ -90,6 +90,8 @@ let mockApiCases: ApiCase[] = [
     modifiers: ["0044 [neonates < 28d]"],
     bp_start_time: "09:05",
     bp_end_time: "09:25",
+    hospital_sticker_image_url: null, // Explicitly null
+    admission_form_image_url: "https://placehold.co/200x150.png",
     notes: "Checkup for premature infant.",
     birth_weight: 2.5,
     primary_assistant: "",
@@ -138,7 +140,6 @@ const processApiCase = (apiCase: ApiCase): Case => {
     status = 'NEW';
   }
 
-  // Ensure start_time is valid or default to '00:00:00' for ISO string creation
   const validStartTime = apiCase.start_time && apiCase.start_time.match(/^\d{2}:\d{2}$/) ? apiCase.start_time + ':00' : '00:00:00';
   const submittedDateTime = `${apiCase.service_date}T${validStartTime}Z`;
 
@@ -170,8 +171,6 @@ export const getDoctors = async (token: string): Promise<Doctor[]> => {
   return mockDoctors.filter(doc => !doc.practiceName.toUpperCase().includes('TEST'));
 };
 
-// This function is not strictly needed if getAllCasesForDoctors fetches by doctor_acc_no array
-// but kept for completeness or potential future use.
 export const getDoctorCases = async (token: string, doctorAccNo: string): Promise<Case[]> => {
   await delay(600);
   if (token !== MOCK_TOKEN) throw new Error('Unauthorized');
@@ -183,10 +182,6 @@ export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[
   await delay(1000);
   if (token !== MOCK_TOKEN) throw new Error('Unauthorized');
   
-  // Find all doctors to get their names for display if treating_surgeon isn't sufficient or for linking
-  // However, the new structure has `treating_surgeon`, so direct doctor mapping might not be needed as before.
-  // We'll use doctorAccNos to filter cases.
-  
   const relevantApiCases = mockApiCases.filter(apiCase => doctorAccNos.includes(apiCase.doctor_acc_no));
   return relevantApiCases.map(processApiCase);
 };
@@ -197,7 +192,7 @@ export const updateCaseStatus = async (token: string, caseId: number, newStatus:
   if (token !== MOCK_TOKEN) throw new Error('Unauthorized');
   const caseIndex = mockApiCases.findIndex(c => c.id === caseId);
   if (caseIndex > -1) {
-    mockApiCases[caseIndex].case_status = newStatus; // Update the 'raw' status
+    mockApiCases[caseIndex].case_status = newStatus; 
     const updatedProcessedCase = processApiCase(mockApiCases[caseIndex]);
     return { success: true, updatedCase: updatedProcessedCase };
   }
