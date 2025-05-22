@@ -46,14 +46,12 @@ export function DataTableToolbar<TData>({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search cases..."
-            value={(table.getColumn("patientName")?.getFilterValue() as string) ?? ""}
+            value={(table.getColumn("patient_name")?.getFilterValue() as string) ?? ""}
             onChange={(event) =>
               // Filtering multiple columns for global search is better
-              // For simplicity, filtering patientName, caseNumber.
-              // A more robust global filter would concatenate multiple cell values.
+              // For simplicity, filtering patient_name.
               {
-                table.getColumn("patientName")?.setFilterValue(event.target.value)
-                // table.getColumn("caseNumber")?.setFilterValue(event.target.value) // Example if you want to search caseNumber too
+                table.getColumn("patient_name")?.setFilterValue(event.target.value)
               }
             }
             className="h-10 w-[150px] lg:w-[250px] pl-10 rounded-md shadow-sm"
@@ -103,10 +101,10 @@ export function DataTableToolbar<TData>({
             <Button
                 variant="ghost"
                 onClick={() => {
-                    const patientNameFilter = table.getColumn("patientName")?.getFilterValue();
+                    const patientNameFilterValue = table.getColumn("patient_name")?.getFilterValue();
                     table.resetColumnFilters();
                     table.getColumn("status")?.setFilterValue("NEW");
-                    if(patientNameFilter) table.getColumn("patientName")?.setFilterValue(patientNameFilter);
+                    if(patientNameFilterValue) table.getColumn("patient_name")?.setFilterValue(patientNameFilterValue);
                 }}
                 className="h-10 px-2 lg:px-3 hover:bg-accent text-accent-foreground"
             >
@@ -155,7 +153,7 @@ export function DataTableToolbar<TData>({
                     checked={column.getIsVisible()}
                     onCheckedChange={(value) => column.toggleVisibility(!!value)}
                   >
-                    {column.id.replace(/([A-Z])/g, ' $1').trim()} {/* Prettify column id */}
+                    {column.id.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim()} {/* Prettify column id */}
                   </DropdownMenuCheckboxItem>
                 )
               })}
