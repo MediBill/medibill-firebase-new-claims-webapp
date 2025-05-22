@@ -1,7 +1,8 @@
+
 "use client";
 
 import type { ColumnDef, Row, Column } from "@tanstack/react-table";
-import { ArrowUpDown, MoreHorizontal } from "lucide-react";
+import { ArrowUpDown, MoreHorizontal, CheckCircle, XCircle, Clock, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -15,6 +16,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Case, CaseStatus } from "@/types/medibill";
 import { format } from 'date-fns';
+import { Badge } from "@/components/ui/badge"; // Import Badge
 
 const availableStatuses: CaseStatus[] = ['NEW', 'PENDING', 'APPROVED', 'REJECTED'];
 
@@ -41,6 +43,26 @@ export function DataTableColumnHeader<TData, TValue>({ column, title, className 
   )
 }
 
+const getStatusBadgeVariant = (status: CaseStatus): "default" | "secondary" | "destructive" | "outline" => {
+  switch (status) {
+    case 'APPROVED': return 'default'; // Often green-ish by default in themes
+    case 'REJECTED': return 'destructive';
+    case 'PENDING': return 'secondary'; // Often yellowish/orange
+    case 'NEW': return 'outline'; // Neutral or blueish
+    default: return 'outline';
+  }
+};
+
+const getStatusBadgeIcon = (status: CaseStatus) => {
+  switch (status) {
+    case 'APPROVED': return <CheckCircle className="h-3.5 w-3.5" />;
+    case 'REJECTED': return <XCircle className="h-3.5 w-3.5" />;
+    case 'PENDING': return <Clock className="h-3.5 w-3.5" />;
+    case 'NEW': return <Tag className="h-3.5 w-3.5" />;
+    default: return null;
+  }
+};
+
 
 export const getColumns = (
   onUpdateStatus: (caseId: string, newStatus: CaseStatus) => Promise<void>,
@@ -65,6 +87,7 @@ export const getColumns = (
         onCheckedChange={(value) => row.toggleSelected(!!value)}
         aria-label="Select row"
         className="translate-y-[2px]"
+        onClick={(e) => e.stopPropagation()} // Prevent row click when interacting with checkbox
       />
     ),
     enableSorting: false,
@@ -89,9 +112,9 @@ export const getColumns = (
     cell: ({ row }) => {
       const date = row.getValue("submittedDate");
       try {
-        return format(new Date(date as string), "PP"); // 'PP' for localized date format e.g. May 01, 2024
+        return format(new Date(date as string), "PP"); 
       } catch (error) {
-        return date as string; // Fallback to original string if date is invalid
+        return date as string; 
       }
     },
   },
@@ -120,54 +143,38 @@ export const getColumns = (
       const updating = isUpdatingStatus(currentCase.id);
 
       return (
-        <Select
-          value={currentStatus}
-          onValueChange={(value) => {
-            onUpdateStatus(currentCase.id, value as CaseStatus);
-          }}
-          disabled={updating}
-        >
-          <SelectTrigger className="w-[120px] h-8 data-[disabled]:opacity-70 data-[disabled]:cursor-not-allowed">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            {availableStatuses.map((status) => (
-              <SelectItem key={status} value={status}>
-                {status}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div onClick={(e) => e.stopPropagation()} className="flex items-center space-x-2"> {/* Stop propagation for the entire cell content */}
+          <Badge variant={getStatusBadgeVariant(currentStatus)} className="px-2.5 py-1 text-xs whitespace-nowrap">
+            {getStatusBadgeIcon(currentStatus)}
+            <span className="ml-1">{currentStatus}</span>
+          </Badge>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 data-[state=open]:bg-muted" disabled={updating}>
+                <MoreHorizontal className="h-4 w-4" />
+                <span className="sr-only">Change status</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Update Status</DropdownMenuLabel>
+              {availableStatuses.map((statusOption) => (
+                <DropdownMenuItem
+                  key={statusOption}
+                  onClick={() => onUpdateStatus(currentCase.id, statusOption)}
+                  disabled={currentStatus === statusOption || updating}
+                  className="capitalize"
+                >
+                  {statusOption}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       );
     },
     filterFn: (row, id, value) => {
       return value.includes(row.getValue(id))
     },
   },
-  // Example for an actions column, can be customized or removed
-  // {
-  //   id: "actions",
-  //   cell: ({ row }) => {
-  //     const payment = row.original;
-  //     return (
-  //       <DropdownMenu>
-  //         <DropdownMenuTrigger asChild>
-  //           <Button variant="ghost" className="h-8 w-8 p-0">
-  //             <span className="sr-only">Open menu</span>
-  //             <MoreHorizontal className="h-4 w-4" />
-  //           </Button>
-  //         </DropdownMenuTrigger>
-  //         <DropdownMenuContent align="end">
-  //           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-  //           <DropdownMenuItem onClick={() => navigator.clipboard.writeText(payment.id)}>
-  //             Copy case ID
-  //           </DropdownMenuItem>
-  //           <DropdownMenuSeparator />
-  //           <DropdownMenuItem>View patient details</DropdownMenuItem>
-  //           <DropdownMenuItem>View doctor details</DropdownMenuItem>
-  //         </DropdownMenuContent>
-  //       </DropdownMenu>
-  //     );
-  //   },
-  // },
 ];
+
