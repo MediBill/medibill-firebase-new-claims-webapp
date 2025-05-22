@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -15,6 +16,7 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table";
 import * as XLSX from 'xlsx';
+import { format } from 'date-fns';
 
 import {
   Table,
@@ -134,6 +136,16 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
     }
   };
 
+  const handleRowClick = (row: any) => {
+    console.log("Clicked row data:", row.original);
+    // You can add navigation logic here, e.g., router.push(`/cases/${row.original.id}`)
+    // Or open a modal: setSelectedCase(row.original); setIsModalOpen(true);
+    toast({
+      title: "Row Clicked",
+      description: `Case: ${row.original.caseNumber}, Patient: ${row.original.patientName}`,
+    });
+  };
+
   if (initialLoading) {
      return (
       <div className="space-y-4 p-4 border rounded-lg shadow-sm bg-card">
@@ -190,7 +202,8 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className="hover:bg-muted/30"
+                  className="hover:bg-muted/30 cursor-pointer"
+                  onClick={() => handleRowClick(row)}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
