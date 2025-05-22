@@ -2,7 +2,7 @@
 "use client";
 
 import type { ColumnDef, Row, Column } from "@tanstack/react-table";
-import { ArrowUpDown, MoreHorizontal, CheckCircle, XCircle, Clock, Tag } from "lucide-react";
+import { ArrowUpDown, MoreHorizontal, CheckCircle, Tag } from "lucide-react"; // Removed Clock, XCircle
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -13,12 +13,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Case, CaseStatus } from "@/types/medibill";
 import { format } from 'date-fns';
-import { Badge } from "@/components/ui/badge"; // Import Badge
+import { Badge } from "@/components/ui/badge";
 
-const availableStatuses: CaseStatus[] = ['NEW', 'PENDING', 'APPROVED', 'REJECTED'];
+const availableStatuses: CaseStatus[] = ['NEW', 'PROCESSED'];
 
 interface DataTableColumnHeaderProps<TData, TValue> extends React.HTMLAttributes<HTMLDivElement> {
   column: Column<TData, TValue>
@@ -45,20 +44,16 @@ export function DataTableColumnHeader<TData, TValue>({ column, title, className 
 
 const getStatusBadgeVariant = (status: CaseStatus): "default" | "secondary" | "destructive" | "outline" => {
   switch (status) {
-    case 'APPROVED': return 'default'; // Often green-ish by default in themes
-    case 'REJECTED': return 'destructive';
-    case 'PENDING': return 'secondary'; // Often yellowish/orange
     case 'NEW': return 'outline'; // Neutral or blueish
+    case 'PROCESSED': return 'default'; // Often green-ish by default in themes
     default: return 'outline';
   }
 };
 
 const getStatusBadgeIcon = (status: CaseStatus) => {
   switch (status) {
-    case 'APPROVED': return <CheckCircle className="h-3.5 w-3.5" />;
-    case 'REJECTED': return <XCircle className="h-3.5 w-3.5" />;
-    case 'PENDING': return <Clock className="h-3.5 w-3.5" />;
     case 'NEW': return <Tag className="h-3.5 w-3.5" />;
+    case 'PROCESSED': return <CheckCircle className="h-3.5 w-3.5" />;
     default: return null;
   }
 };
@@ -143,7 +138,7 @@ export const getColumns = (
       const updating = isUpdatingStatus(currentCase.id);
 
       return (
-        <div onClick={(e) => e.stopPropagation()} className="flex items-center space-x-2"> {/* Stop propagation for the entire cell content */}
+        <div onClick={(e) => e.stopPropagation()} className="flex items-center space-x-2">
           <Badge variant={getStatusBadgeVariant(currentStatus)} className="px-2.5 py-1 text-xs whitespace-nowrap">
             {getStatusBadgeIcon(currentStatus)}
             <span className="ml-1">{currentStatus}</span>
@@ -177,4 +172,3 @@ export const getColumns = (
     },
   },
 ];
-

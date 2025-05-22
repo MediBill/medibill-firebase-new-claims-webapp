@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { Table } from "@tanstack/react-table"
@@ -28,7 +29,7 @@ interface DataTableToolbarProps<TData> {
   isExporting: boolean;
 }
 
-const availableStatuses: CaseStatus[] = ['NEW', 'PENDING', 'APPROVED', 'REJECTED'];
+const availableStatuses: CaseStatus[] = ['NEW', 'PROCESSED'];
 
 export function DataTableToolbar<TData>({
   table,
@@ -84,16 +85,35 @@ export function DataTableToolbar<TData>({
             </SelectContent>
           </Select>
         )}
-        {isFiltered && (
+        {isFiltered && table.getColumn("status")?.getFilterValue() !== 'NEW' && ( // Only show reset if not the default NEW filter or other filters are active
           <Button
             variant="ghost"
-            onClick={() => table.resetColumnFilters()}
+            onClick={() => {
+              table.resetColumnFilters();
+              table.getColumn("status")?.setFilterValue("NEW"); // Re-apply default NEW filter after resetting all
+            }}
             className="h-10 px-2 lg:px-3 hover:bg-destructive/10 text-destructive"
           >
-            Reset
+            Reset Filters
             <X className="ml-2 h-4 w-4" />
           </Button>
         )}
+         {isFiltered && table.getColumn("status")?.getFilterValue() === 'NEW' && table.getState().columnFilters.filter(cf => cf.id !== 'status').length > 0 && (
+           // handles case where "NEW" is selected but other filters are also active
+            <Button
+                variant="ghost"
+                onClick={() => {
+                    const patientNameFilter = table.getColumn("patientName")?.getFilterValue();
+                    table.resetColumnFilters();
+                    table.getColumn("status")?.setFilterValue("NEW");
+                    if(patientNameFilter) table.getColumn("patientName")?.setFilterValue(patientNameFilter);
+                }}
+                className="h-10 px-2 lg:px-3 hover:bg-accent text-accent-foreground"
+            >
+                Clear Search
+                <X className="ml-2 h-4 w-4" />
+            </Button>
+         )}
       </div>
 
       <div className="flex items-center space-x-2">

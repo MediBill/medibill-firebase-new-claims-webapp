@@ -8,13 +8,13 @@ import {
   SheetDescription,
   SheetFooter,
   SheetClose,
-} from "@/components/ui/sheet"; // SheetContent is used by the parent
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import type { Case, CaseStatus } from "@/types/medibill";
 import { format } from 'date-fns';
-import { CalendarDays, User, BriefcaseMedical, FileText, Banknote, Tag, CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
+import { CalendarDays, User, BriefcaseMedical, FileText, Banknote, Tag, CheckCircle, AlertTriangle } from 'lucide-react'; // Removed XCircle, Clock
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -25,18 +25,14 @@ interface CaseDetailSheetProps {
   isUpdatingStatus: boolean;
 }
 
-const availableStatuses: CaseStatus[] = ['NEW', 'PENDING', 'APPROVED', 'REJECTED'];
+const availableStatuses: CaseStatus[] = ['NEW', 'PROCESSED'];
 
 const getStatusVariant = (status: CaseStatus): "default" | "secondary" | "destructive" | "outline" => {
   switch (status) {
-    case 'APPROVED':
-      return 'default'; // Greenish if you customize theme, or primary
-    case 'REJECTED':
-      return 'destructive';
-    case 'PENDING':
-      return 'secondary'; // Yellowish/Orange if customized, or secondary
     case 'NEW':
       return 'outline'; // Blueish or neutral
+    case 'PROCESSED':
+      return 'default'; // Greenish if you customize theme, or primary
     default:
       return 'outline';
   }
@@ -44,16 +40,12 @@ const getStatusVariant = (status: CaseStatus): "default" | "secondary" | "destru
 
 const getStatusIcon = (status: CaseStatus) => {
   switch (status) {
-    case 'APPROVED':
-      return <CheckCircle className="mr-2 h-4 w-4 text-green-500" />;
-    case 'REJECTED':
-      return <XCircle className="mr-2 h-4 w-4 text-red-500" />;
-    case 'PENDING':
-      return <Clock className="mr-2 h-4 w-4 text-yellow-500" />;
     case 'NEW':
       return <Tag className="mr-2 h-4 w-4 text-blue-500" />;
+    case 'PROCESSED':
+      return <CheckCircle className="mr-2 h-4 w-4 text-green-500" />;
     default:
-      return <AlertTriangle className="mr-2 h-4 w-4" />;
+      return <AlertTriangle className="mr-2 h-4 w-4" />; // Fallback
   }
 };
 
@@ -126,12 +118,6 @@ export function CaseDetailSheet({ caseDetails, onClose, onUpdateStatus, isUpdati
             </Select>
           </div>
         </div>
-        {/* Placeholder for future AI insights or notes */}
-        {/* <Separator />
-        <div>
-          <h4 className="text-md font-semibold mb-2 text-foreground">AI Insights & Notes</h4>
-          <p className="text-sm text-muted-foreground">Insights related to this case will appear here.</p>
-        </div> */}
       </div>
 
       <SheetFooter className="p-6 border-t bg-muted/30 mt-auto">
@@ -159,4 +145,3 @@ const DetailItem: React.FC<DetailItemProps> = ({ icon, label, value }) => (
     </div>
   </div>
 );
-

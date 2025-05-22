@@ -48,7 +48,12 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
   const { toast } = useToast();
   const [rowSelection, setRowSelection] = React.useState({});
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([
+    {
+      id: 'status',
+      value: 'NEW',
+    }
+  ]);
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState(''); 
 
@@ -74,9 +79,8 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
       const result = await updateCaseStatusApi(authToken, caseId, newStatus);
       if (result.success && result.updatedCase) {
         setTableData(prevData => prevData.map(c => c.id === caseId ? { ...c, ...result.updatedCase } : c));
-        // Also update selectedCase if it's the one being edited
         if (selectedCase && selectedCase.id === caseId) {
-            setSelectedCase(result.updatedCase);
+            setSelectedCase({...selectedCase, status: newStatus}); // Update status in sheet if open
         }
         toast({ title: "Success", description: `Case ${result.updatedCase.caseNumber} status updated to ${newStatus}.` });
       } else {
@@ -91,7 +95,7 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
   
   const isUpdatingStatus = (caseId: string) => !!updatingStatusMap[caseId];
 
-  const columns = React.useMemo(() => getColumns(handleUpdateStatus, isUpdatingStatus), [handleUpdateStatus, isUpdatingStatus, authToken]);
+  const columns = React.useMemo(() => getColumns(handleUpdateStatus, isUpdatingStatus), [authToken, tableData]); // Added tableData to dependencies
 
   const table = useReactTable({
     data: tableData,
@@ -146,30 +150,6 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
   };
 
   const handleRowClick = (row: Row<Case>) => {
-    // Prevent sheet from opening if clicking on an interactive element like the status select
-    // This is a basic check; more robust might involve checking event.target
-    const clickedOnInteractiveElement = (event: React.MouseEvent) => {
-        let target = event.target as HTMLElement;
-        while (target && target !== event.currentTarget) {
-            if (target.tagName === 'SELECT' || target.closest('[role="option"]') || target.closest('[role="combobox"]')) {
-                return true;
-            }
-            target = target.parentElement as HTMLElement;
-        }
-        return false;
-    };
-
-    // If the click originated from an interactive element handled by columns.tsx, don't open the sheet.
-    // This is a proxy - a more robust way would be to check event.target or pass a flag from the cell.
-    // For now, we assume if the status is being updated, it was an interactive click.
-    if (isUpdatingStatus(row.original.id)) return;
-
-
-    // Check if the click target is part of the select dropdown or its trigger
-    // This requires inspecting the event target, which is not directly available here.
-    // A common workaround is to not trigger row click if an inner element handles its own click.
-    // For now, we'll proceed, but this might need refinement if select dropdown interaction is an issue.
-
     setSelectedCase(row.original);
     setIsSheetOpen(true);
   };
@@ -202,7 +182,7 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
   }
 
   return (
-    <div className="space-y-4 p-4 border rounded-lg shadow-sm bg-card">
+    <div className="space-y-4 p-4 border rounded-lg shadow-sm bg-card mt-6"> {/* Added mt-6 for spacing after header removal */}
       <DataTableToolbar table={table} onExport={handleExport} isExporting={isExporting} />
       <div className="rounded-md border shadow-inner">
         <Table>
@@ -232,40 +212,25 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
                   data-state={row.getIsSelected() && "selected"}
                   className="hover:bg-muted/30 cursor-pointer"
                   onClick={(event) => {
-                    // Check if the click target or its parent is the select component
                     let target = event.target as HTMLElement;
-                    let isSelectClick = false;
+                    let isInteractiveClick = false;
                     while (target && target !== event.currentTarget) {
-                        if (target.hasAttribute('data-radix-select-trigger') || target.closest('[data-radix-select-content]')) {
-                            isSelectClick = true;
+                        if (target.dataset.radixSelectTrigger !== undefined || 
+                            target.closest('[data-radix-select-content]') !== null ||
+                            target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'checkbox' ||
+                            target.closest('button') !== null) { // Added check for any button click within the row
+                            isInteractiveClick = true;
                             break;
                         }
                         target = target.parentElement as HTMLElement;
                     }
-                    if (!isSelectClick) {
+                    if (!isInteractiveClick) {
                         handleRowClick(row);
                     }
                   }}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} 
-                      onClick={(e) => {
-                        // If the cell itself is interactive (like the status dropdown), stop propagation
-                        // so the row click handler doesn't fire for that specific interaction.
-                        const cellContext = cell.getContext();
-                        if (cell.column.id === 'status' || cell.column.id === 'select') {
-                           // More specific check: if the click is on the SelectTrigger or its children
-                           let target = e.target as HTMLElement;
-                           while(target && target !== e.currentTarget as HTMLElement) {
-                               if (target.dataset.radixSelectTrigger !== undefined || target.closest('[data-radix-select-trigger]') !== null || target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'checkbox') {
-                                   e.stopPropagation(); // Prevent row click if interacting with select/checkbox
-                                   return;
-                               }
-                               target = target.parentElement as HTMLElement;
-                           }
-                        }
-                      }}
-                    >
+                    <TableCell key={cell.id} >
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext()
@@ -298,8 +263,6 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
               onUpdateStatus={async (newStatus) => {
                 if (selectedCase && authToken) {
                   await handleUpdateStatus(selectedCase.id, newStatus);
-                  // The selectedCase state will be updated via handleUpdateStatus -> setTableData -> useEffect
-                  // And also directly via handleUpdateStatus -> setSelectedCase if it was the one edited
                 }
               }}
               isUpdatingStatus={selectedCase ? isUpdatingStatus(selectedCase.id) : false}
@@ -310,4 +273,3 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
     </div>
   );
 }
-

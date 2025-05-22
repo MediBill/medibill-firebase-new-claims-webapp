@@ -1,3 +1,4 @@
+
 import type { AuthToken, Doctor, Case, CaseStatus } from '@/types/medibill';
 
 const DEFAULT_PASSWORD = 'password123';
@@ -13,12 +14,12 @@ let mockDoctors: Doctor[] = [
 
 let mockCases: Case[] = [
   { id: 'case1', doctorId: 'doc1', patientName: 'Liam Green', caseNumber: 'PN001', submittedDate: '2024-05-01T10:00:00Z', status: 'NEW', insuranceProvider: 'MediCare Plus', amount: 150.00, doctorName: 'Dr. Alice Smith' },
-  { id: 'case2', doctorId: 'doc1', patientName: 'Olivia Blue', caseNumber: 'PN002', submittedDate: '2024-05-02T11:30:00Z', status: 'PENDING', insuranceProvider: 'HealthFirst', amount: 220.50, doctorName: 'Dr. Alice Smith' },
-  { id: 'case3', doctorId: 'doc2', patientName: 'Noah Grey', caseNumber: 'GN001', submittedDate: '2024-05-03T09:15:00Z', status: 'APPROVED', insuranceProvider: 'UnitedHealth', amount: 95.75, doctorName: 'Dr. Bob Johnson' },
+  { id: 'case2', doctorId: 'doc1', patientName: 'Olivia Blue', caseNumber: 'PN002', submittedDate: '2024-05-02T11:30:00Z', status: 'PROCESSED', insuranceProvider: 'HealthFirst', amount: 220.50, doctorName: 'Dr. Alice Smith' }, // Was PENDING
+  { id: 'case3', doctorId: 'doc2', patientName: 'Noah Grey', caseNumber: 'GN001', submittedDate: '2024-05-03T09:15:00Z', status: 'PROCESSED', insuranceProvider: 'UnitedHealth', amount: 95.75, doctorName: 'Dr. Bob Johnson' }, // Was APPROVED
   { id: 'case4', doctorId: 'doc2', patientName: 'Emma Black', caseNumber: 'GN002', submittedDate: '2024-05-04T14:00:00Z', status: 'NEW', insuranceProvider: 'MediCare Plus', amount: 300.00, doctorName: 'Dr. Bob Johnson' },
-  { id: 'case5', doctorId: 'doc3', patientName: 'Ava Purple', caseNumber: 'CN001', submittedDate: '2024-05-05T16:45:00Z', status: 'REJECTED', insuranceProvider: 'Aetna', amount: 500.20, doctorName: 'Dr. Carol White' },
+  { id: 'case5', doctorId: 'doc3', patientName: 'Ava Purple', caseNumber: 'CN001', submittedDate: '2024-05-05T16:45:00Z', status: 'PROCESSED', insuranceProvider: 'Aetna', amount: 500.20, doctorName: 'Dr. Carol White' }, // Was REJECTED
   { id: 'case6', doctorId: 'doc5', patientName: 'James Gold', caseNumber: 'ON001', submittedDate: '2024-05-06T08:00:00Z', status: 'NEW', insuranceProvider: 'Cigna', amount: 1200.00, doctorName: 'Dr. Eve Davis' },
-  { id: 'case7', doctorId: 'doc5', patientName: 'Sophia Silver', caseNumber: 'ON002', submittedDate: '2024-05-07T13:20:00Z', status: 'PENDING', insuranceProvider: 'HealthFirst', amount: 750.00, doctorName: 'Dr. Eve Davis' },
+  { id: 'case7', doctorId: 'doc5', patientName: 'Sophia Silver', caseNumber: 'ON002', submittedDate: '2024-05-07T13:20:00Z', status: 'PROCESSED', insuranceProvider: 'HealthFirst', amount: 750.00, doctorName: 'Dr. Eve Davis' }, // Was PENDING
 ];
 
 // Simulate API delay

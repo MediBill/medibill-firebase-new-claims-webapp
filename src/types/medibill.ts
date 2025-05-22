@@ -1,3 +1,4 @@
+
 export interface AuthToken {
   token: string;
   expiresAt: number; // Timestamp for expiration
@@ -10,7 +11,7 @@ export interface Doctor {
   specialty: string;
 }
 
-export type CaseStatus = 'NEW' | 'PENDING' | 'APPROVED' | 'REJECTED';
+export type CaseStatus = 'NEW' | 'PROCESSED';
 
 export interface Case {
   id: string;
