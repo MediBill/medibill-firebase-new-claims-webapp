@@ -14,7 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import type { Case, CaseStatus } from "@/types/medibill";
 import { format, parseISO } from 'date-fns';
-import { CalendarDays, User, BriefcaseMedical, FileText, Tag, CheckCircle, AlertTriangle, Hash, Weight, Ruler, Clock, ListChecks, Image as ImageIcon, Edit3, Thermometer, Activity } from 'lucide-react'; // Added Baby, Activity
+import { CalendarDays, User, BriefcaseMedical, FileText, Tag, CheckCircle, AlertTriangle, Hash, Weight, Ruler, Clock, ListChecks, Image as ImageIcon, Edit3, Thermometer, Activity } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import Image from 'next/image'; 
@@ -52,12 +52,14 @@ const formatNullableNumber = (num?: number | null) => num !== null && num !== un
 const TimeDisplay: React.FC<{ label: string, time?: string | null }> = ({ label, time }) => {
   if (!time) return <DetailItem icon={<Clock className="text-primary" />} label={label} value="N/A" />;
   try {
+    // Assuming time is "HH:MM"
     const [hours, minutes] = time.split(':');
-    const date = new Date();
+    const date = new Date(); // Use a dummy date for time formatting
     date.setHours(parseInt(hours, 10));
     date.setMinutes(parseInt(minutes, 10));
     return <DetailItem icon={<Clock className="text-primary" />} label={label} value={format(date, "h:mm a")} />;
   } catch {
+    // Fallback if time format is unexpected
     return <DetailItem icon={<Clock className="text-primary" />} label={label} value={time} />; 
   }
 };
@@ -68,7 +70,7 @@ export function CaseDetailSheet({ caseDetails, onClose, onUpdateStatus, isUpdati
     id,
     patient_name,
     treating_surgeon,
-    service_date,
+    service_date, // "YYYY-MM-DD"
     start_time,
     end_time,
     status,
@@ -92,10 +94,11 @@ export function CaseDetailSheet({ caseDetails, onClose, onUpdateStatus, isUpdati
     referring_service_provider,
     referred_by_icd10,
     asa_level,
-    submittedDateTime
+    // submittedDateTime is available if needed for other purposes
   } = caseDetails;
 
-  const formattedServiceDate = service_date ? format(parseISO(submittedDateTime), "MMMM d, yyyy") : "N/A"; 
+  // Use service_date directly for formatting if it's "YYYY-MM-DD"
+  const formattedServiceDate = service_date ? format(parseISO(service_date), "MMMM d, yyyy") : "N/A"; 
 
   const hasHospitalSticker = hospital_sticker_image_url && hospital_sticker_image_url.trim() !== "";
   const hasAdmissionForm = admission_form_image_url && admission_form_image_url.trim() !== "";
@@ -155,7 +158,7 @@ export function CaseDetailSheet({ caseDetails, onClose, onUpdateStatus, isUpdati
           <>
             <Separator />
             <Section title="Notes">
-              <div className="flex items-start space-x-3 py-2 col-span-full"> {/* Ensure notes take full width if needed */}
+              <div className="flex items-start space-x-3 py-2 col-span-full"> 
                 <Edit3 className="text-primary flex-shrink-0 w-5 h-5 mt-0.5" />
                 <p className="text-sm text-foreground whitespace-pre-wrap">{notes}</p>
               </div>
@@ -247,14 +250,15 @@ interface ImageItemProps {
 }
 
 const ImageItem: React.FC<ImageItemProps> = ({ label, url, dataAiHint }) => {
-  if (!url || url.trim() === "") return null; // Don't render if URL is empty
+  if (!url || url.trim() === "") return null;
 
   return (
     <div className="py-2">
       <p className="text-xs text-muted-foreground flex items-center mb-1">
           <ImageIcon className="text-primary w-4 h-4 mr-2" />{label}
       </p>
-      {url.startsWith('https://placehold.co') ? (
+      {/* Using next/image for known placeholder structure, otherwise a link */}
+      {url.startsWith('https://placehold.co/') ? (
           <Image src={url} alt={label} width={300} height={200} className="rounded border shadow-sm" data-ai-hint={dataAiHint} />
       ) : (
           <a href={url} target="_blank" rel="noopener noreferrer" className="text-sm text-accent hover:underline break-all">{url}</a>
@@ -262,3 +266,4 @@ const ImageItem: React.FC<ImageItemProps> = ({ label, url, dataAiHint }) => {
     </div>
   );
 };
+

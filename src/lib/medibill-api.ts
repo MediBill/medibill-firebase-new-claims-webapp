@@ -32,10 +32,10 @@ let mockApiCases: ApiCase[] = [
     modifiers: ["0032 [position]", "0043 [age > 70yrs or age <1 year]", "0044 [neonates < 28d]"],
     bp_start_time: "11:00",
     bp_end_time: "14:00",
-    hospital_sticker_image_url: "https://placehold.co/300x200.png", // Added placeholder
-    admission_form_image_url: "https://placehold.co/300x220.png", // Added placeholder
+    hospital_sticker_image_url: "https://placehold.co/300x200.png",
+    admission_form_image_url: "https://placehold.co/300x220.png",
     notes: "Patient reported feeling unwell post-op. This is an extended note to test wrapping and display within the detail sheet. It might contain multiple lines.",
-    birth_weight: 5, // Updated as per user example
+    birth_weight: 5,
     primary_assistant: "DR MACMILLIAN",
     secondary_assistant: "",
     referring_service_provider: "General practitioners INC",
@@ -53,22 +53,22 @@ let mockApiCases: ApiCase[] = [
     service_date: "2024-03-09",
     start_time: "11:00",
     end_time: "14:30",
-    icd10_codes: ["B01", "B01.0"], // Kept some variety from previous
-    procedure_codes: ["0822"], // Kept some variety
-    consultations: ["0151 [pre-op (10-20mins)]", "0173 [first hospital consult (< 15mins)]"], // Updated
-    ortho_modifiers: ["5441 [any other bones]"], // Updated
-    procedures: ["0026 [one lung ventilation]", "1141 [intercostal drain]"], // Updated
-    modifiers: ["0032 [position]", "0043 [age > 70yrs or age <1 year]"], // Updated
+    icd10_codes: ["B01", "B01.0"],
+    procedure_codes: ["0822"],
+    consultations: ["0151 [pre-op (10-20mins)]", "0173 [first hospital consult (< 15mins)]"],
+    ortho_modifiers: ["5441 [any other bones]"],
+    procedures: ["0026 [one lung ventilation]", "1141 [intercostal drain]"],
+    modifiers: ["0032 [position]", "0043 [age > 70yrs or age <1 year]"],
     bp_start_time: "14:00",
     bp_end_time: "16:00",
-    hospital_sticker_image_url: "https://placehold.co/350x250.png", // Changed placeholder
-    admission_form_image_url: "", // Example of one empty URL
+    hospital_sticker_image_url: "https://placehold.co/350x250.png",
+    admission_form_image_url: "",
     notes: "Routine procedure, no complications noted. Patient recovering well.",
-    birth_weight: 5, // Updated as per user example
+    birth_weight: 5,
     primary_assistant: "DR MACMILLIAN",
-    secondary_assistant: "DR SMITH", // Kept variety
+    secondary_assistant: "DR SMITH",
     referring_service_provider: "City Hospital Referrals",
-    referred_by_icd10: ["B01"], // Kept variety
+    referred_by_icd10: ["B01"],
     asa_level: 2,
     case_status: "PROCESSED"
   },
@@ -90,7 +90,7 @@ let mockApiCases: ApiCase[] = [
     modifiers: ["0044 [neonates < 28d]"],
     bp_start_time: "09:05",
     bp_end_time: "09:25",
-    hospital_sticker_image_url: null, // Explicitly null
+    hospital_sticker_image_url: null,
     admission_form_image_url: "https://placehold.co/200x150.png",
     notes: "Checkup for premature infant.",
     birth_weight: 2.5,
@@ -198,3 +198,4 @@ export const updateCaseStatus = async (token: string, caseId: number, newStatus:
   }
   return { success: false };
 };
+
