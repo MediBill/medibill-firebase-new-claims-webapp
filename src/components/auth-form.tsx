@@ -12,12 +12,13 @@ import type { AuthToken } from '@/types/medibill';
 
 interface AuthFormProps {
   onLoginSuccess: (token: AuthToken) => void;
-  loginApiCall: (email: string, password: string) => Promise<AuthToken>;
+  // loginApiCall now only needs the password, as email is fixed
+  loginApiCall: (password: string) => Promise<AuthToken>;
 }
 
 export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
-  const [email, setEmail] = useState('medibill.developer@gmail.com'); // Default email for convenience
-  const [password, setPassword] = useState('apt@123!'); // Default password for convenience
+  // Email is no longer a state, password defaults to the required one.
+  const [password, setPassword] = useState('apt@123!');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +27,8 @@ export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
     setIsLoading(true);
     setError(null);
     try {
-      const authToken = await loginApiCall(email, password);
+      // Email is hardcoded or handled within loginApiCall, just pass password
+      const authToken = await loginApiCall(password);
       onLoginSuccess(authToken);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed');
@@ -39,25 +41,14 @@ export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
     <div className="flex justify-center items-center min-h-[calc(100vh-200px)]">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader>
-          {/* <CardTitle className="text-2xl text-center">MediBill API Login</CardTitle> */}
-          <CardDescription className="text-center pt-4"> {/* Added padding-top for spacing */}
+          {/* CardTitle removed */}
+          <CardDescription className="text-center pt-4">
             Enter your credentials to access case data.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={isLoading}
-                placeholder="you@example.com"
-              />
-            </div>
+            {/* Email input removed */}
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input
