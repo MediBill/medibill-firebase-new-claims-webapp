@@ -12,12 +12,11 @@ import type { AuthToken } from '@/types/medibill';
 
 interface AuthFormProps {
   onLoginSuccess: (token: AuthToken) => void;
-  // loginApiCall now only needs the password
   loginApiCall: (password: string) => Promise<AuthToken>;
 }
 
 export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
-  // Password defaults to "Onejuly2021"
+  // Password defaults to "Onejuly2021" as per user request
   const [password, setPassword] = useState('Onejuly2021');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +26,8 @@ export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
     setIsLoading(true);
     setError(null);
     try {
+      // This password (default "Onejuly2021" or user input) is passed to loginApiCall
+      // The loginApiCall (in medibill-api.ts) will ignore this and use "apt@123!"
       const authToken = await loginApiCall(password);
       onLoginSuccess(authToken);
     } catch (err) {

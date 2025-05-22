@@ -4,44 +4,45 @@ import type { AuthToken, Doctor, Case, CaseStatus, ApiCase } from '@/types/medib
 const API_BASE_URL = 'https://api.medibill.co.za/api';
 const LOGIN_ENDPOINT = `${API_BASE_URL}/auth/login`;
 const DOCTORS_ENDPOINT = `${API_BASE_URL}/doctors`;
-const CASES_ENDPOINT = `${API_BASE_URL}/cases`; // Endpoint to get all cases for the authenticated user
+const CASES_ENDPOINT = `${API_BASE_URL}/cases`;
 const UPDATE_CASE_ENDPOINT_TEMPLATE = `${API_BASE_URL}/cases/{caseId}/status`;
 
 // Hardcoded email for the login process
 const APP_EMAIL = 'medibill.developer@gmail.com';
+// Hardcoded password for the API authentication, as per requirement
+const API_PASSWORD = 'apt@123!';
 
 const processApiCase = (apiCase: ApiCase): Case => {
   let status: CaseStatus = 'NEW'; // Default for empty or unrecognized case_status
   if (apiCase.case_status === 'PROCESSED') {
     status = 'PROCESSED';
-  } else if (apiCase.case_status === 'NEW') {
+  } else if (apiCase.case_status === 'NEW' || !apiCase.case_status) { // Treat empty as NEW
     status = 'NEW';
   }
 
-  // Ensure start_time is valid HH:MM, default to 00:00 if not
   const validStartTimeString = apiCase.start_time && apiCase.start_time.match(/^\d{2}:\d{2}$/) ? apiCase.start_time : '00:00';
-  // Append seconds if missing for ISO compatibility
   const fullStartTime = validStartTimeString.length === 5 ? `${validStartTimeString}:00` : validStartTimeString;
   
   const submittedDateTime = `${apiCase.service_date}T${fullStartTime}Z`;
-
 
   return {
     ...apiCase,
     status,
     submittedDateTime,
-    original_case_status: apiCase.case_status,
+    original_case_status: apiCase.case_status || '', // Ensure original_case_status is a string
   };
 };
 
-export const login = async (password: string): Promise<AuthToken> => {
+// The 'password' parameter from AuthForm is received but API_PASSWORD is used for the actual API call.
+export const login = async (passwordFromForm: string): Promise<AuthToken> => {
   try {
     const response = await fetch(LOGIN_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ email: APP_EMAIL, password }),
+      // Use the hardcoded API_PASSWORD for the API call
+      body: JSON.stringify({ email: APP_EMAIL, password: API_PASSWORD }),
     });
 
     if (!response.ok) {
@@ -55,36 +56,30 @@ export const login = async (password: string): Promise<AuthToken> => {
       throw new Error(errorMessage);
     }
 
-    // Assuming the API returns a structure compatible with AuthToken
-    // e.g., { token: "some_token", expires_in: 3600 } or { token: "some_token", expires_at: timestamp }
     const responseData = await response.json();
-
-    // Adapt this based on your API's actual response structure for token and expiration
     let tokenData: AuthToken;
-    if (responseData.access_token && responseData.expires_in) { // Example: OAuth like response
+
+    if (responseData.access_token && responseData.expires_in) {
         tokenData = {
             token: responseData.access_token,
             expiresAt: Date.now() + responseData.expires_in * 1000,
         };
-    } else if (responseData.token && responseData.expiresAt) { // Direct match
+    } else if (responseData.token && responseData.expiresAt) {
         tokenData = {
             token: responseData.token,
             expiresAt: responseData.expiresAt,
         };
-    } else if (responseData.token && responseData.expires_in) { // Common variation
+    } else if (responseData.token && responseData.expires_in) {
          tokenData = {
             token: responseData.token,
             expiresAt: Date.now() + responseData.expires_in * 1000,
         };
-    }
-     else if (responseData.token) { // If only token is returned, handle expiration as needed
+    } else if (responseData.token) {
         tokenData = {
             token: responseData.token,
             expiresAt: Date.now() + 3600 * 1000, // Default to 1 hour if not specified
         };
-    }
-    else {
-        // If the structure is unknown or token is missing
+    } else {
         console.error("Unexpected login response structure:", responseData);
         throw new Error("Login successful, but token data is missing or in an unexpected format.");
     }
@@ -92,7 +87,11 @@ export const login = async (password: string): Promise<AuthToken> => {
 
   } catch (error) {
     console.error('API Login Error:', error);
-    throw error; // Re-throw to be caught by the calling component
+    // Re-throw to be caught by the calling component, which will then show it in the UI or toast
+    if (error instanceof Error) {
+        throw error;
+    }
+    throw new Error('An unknown error occurred during login.');
   }
 };
 
@@ -112,16 +111,17 @@ export const getDoctors = async (token: string): Promise<Doctor[]> => {
       throw new Error(errorMessage);
     }
     const data: Doctor[] = await response.json();
-    return data.filter(doc => !doc.practiceName?.toUpperCase().includes('TEST'));
+    return data.filter(doc => doc.practiceName && !doc.practiceName.toUpperCase().includes('TEST'));
   } catch (error) {
     console.error('API getDoctors Error:', error);
-    throw error;
+    if (error instanceof Error) throw error;
+    throw new Error('An unknown error occurred while fetching doctors.');
   }
 };
 
 export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[]): Promise<Case[]> => {
   try {
-    const response = await fetch(CASES_ENDPOINT, { // Fetches all cases for the authenticated user
+    const response = await fetch(CASES_ENDPOINT, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
@@ -135,12 +135,12 @@ export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[
       throw new Error(errorMessage);
     }
     const apiCases: ApiCase[] = await response.json();
-    // Filter client-side if the API returns all cases for the user
-    const relevantApiCases = apiCases.filter(apiCase => doctorAccNos.includes(apiCase.doctor_acc_no));
+    const relevantApiCases = apiCases.filter(apiCase => apiCase.doctor_acc_no && doctorAccNos.includes(apiCase.doctor_acc_no));
     return relevantApiCases.map(processApiCase);
   } catch (error) {
     console.error('API getAllCasesForDoctors Error:', error);
-    throw error;
+    if (error instanceof Error) throw error;
+    throw new Error('An unknown error occurred while fetching cases.');
   }
 };
 
@@ -148,12 +148,12 @@ export const updateCaseStatus = async (token: string, caseId: number, newStatus:
   const url = UPDATE_CASE_ENDPOINT_TEMPLATE.replace('{caseId}', caseId.toString());
   try {
     const response = await fetch(url, {
-      method: 'PUT', // Or 'PATCH' or 'POST', depending on your API
+      method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ case_status: newStatus }), // API might expect 'status' or other field name
+      body: JSON.stringify({ case_status: newStatus }),
     });
     if (!response.ok) {
        let errorMessage = `Failed to update case status: ${response.status}`;
@@ -163,11 +163,12 @@ export const updateCaseStatus = async (token: string, caseId: number, newStatus:
        } catch (e) { /* ignore */ }
        throw new Error(errorMessage);
     }
-    // Assuming API returns the updated case upon successful update
     const updatedApiCase: ApiCase = await response.json();
     return { success: true, updatedCase: processApiCase(updatedApiCase) };
   } catch (error) {
     console.error('API updateCaseStatus Error:', error);
-    return { success: false }; // Indicate failure
+    // Return the error message to be displayed in a toast
+    const message = error instanceof Error ? error.message : 'An unknown error occurred while updating case status.';
+    return { success: false, updatedCase: undefined };
   }
 };
