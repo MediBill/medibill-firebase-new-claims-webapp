@@ -68,6 +68,8 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
   if (!API_PASSWORD) {
      const errorMsg = "API Call Pre-check Error: API_PASSWORD is not configured (build-time variable). Login will fail.";
     console.error(errorMsg);
+     // Do NOT log API_PASSWORD
+     console.log(`[MediBill API] Login Request Body (excluding password): ${JSON.stringify({ email: APP_EMAIL})}`);
     throw new Error(errorMsg);
   }
 
