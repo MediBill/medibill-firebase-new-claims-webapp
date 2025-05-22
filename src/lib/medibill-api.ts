@@ -1,8 +1,8 @@
 
 import type { AuthToken, Doctor, Case, CaseStatus, ApiCase } from '@/types/medibill';
 
-const API_BASE_URL = 'https://api.medibill.co.za/api';
-const LOGIN_ENDPOINT = `${API_BASE_URL}/auth/login`;
+const API_BASE_URL = 'https://api.medibill.co.za/api/v1'; // Updated base to v1 as login uses it
+const LOGIN_ENDPOINT = `${API_BASE_URL}/auth/login`; // Corrected endpoint
 const DOCTORS_ENDPOINT = `${API_BASE_URL}/doctors`;
 const CASES_ENDPOINT = `${API_BASE_URL}/cases`;
 const UPDATE_CASE_ENDPOINT_TEMPLATE = `${API_BASE_URL}/cases/{caseId}/status`;
