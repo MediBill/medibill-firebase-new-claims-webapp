@@ -18,6 +18,7 @@ import { CalendarDays, User, BriefcaseMedical, FileText, Tag, CheckCircle, Alert
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import Image from 'next/image'; // For placeholder or actual images
+import { cn } from "@/lib/utils"; // Added import for cn
 
 interface CaseDetailSheetProps {
   caseDetails: Case;
@@ -249,3 +250,4 @@ const ImageItem: React.FC<{ label: string; url: string }> = ({ label, url }) => 
     )}
   </div>
 );
+
