@@ -1,8 +1,9 @@
 
 import type { AuthToken, Doctor, Case, CaseStatus, ApiCase } from '@/types/medibill';
 
-const API_BASE_URL = 'https://api.medibill.co.za/api/v1'; // Updated base to v1 as login uses it
-const LOGIN_ENDPOINT = `${API_BASE_URL}/auth/login`; // Corrected endpoint
+// The API_BASE_URL is now correctly set to include /v1
+const API_BASE_URL = 'https://api.medibill.co.za/api/v1';
+const LOGIN_ENDPOINT = `${API_BASE_URL}/auth/login`;
 const DOCTORS_ENDPOINT = `${API_BASE_URL}/doctors`;
 const CASES_ENDPOINT = `${API_BASE_URL}/cases`;
 const UPDATE_CASE_ENDPOINT_TEMPLATE = `${API_BASE_URL}/cases/{caseId}/status`;
@@ -20,24 +21,18 @@ const processApiCase = (apiCase: ApiCase): Case => {
     status = 'NEW';
   }
 
-  // Ensure start_time is a valid "HH:MM" string before appending seconds
-  const validStartTimeString = apiCase.start_time && apiCase.start_time.match(/^\d{2}:\d{2}$/) 
-    ? apiCase.start_time 
-    : '00:00'; // Default to "00:00" if invalid or null/undefined
-  
-  // Append ":00" for seconds if start_time is just "HH:MM"
-  const fullStartTime = validStartTimeString.length === 5 ? `${validStartTimeString}:00` : validStartTimeString;
+  const validStartTimeString = apiCase.start_time && apiCase.start_time.match(/^\d{2}:\d{2}$/)
+    ? apiCase.start_time
+    : '00:00';
 
-  // Construct submittedDateTime. API returns service_date as "YYYY-MM-DD"
-  // and start_time as "HH:MM" (or potentially "HH:MM:SS").
-  // We need "YYYY-MM-DDTHH:MM:SSZ" for ISO string.
-  const submittedDateTime = `${apiCase.service_date}T${fullStartTime}Z`; // Assuming UTC
+  const fullStartTime = validStartTimeString.length === 5 ? `${validStartTimeString}:00` : validStartTimeString;
+  const submittedDateTime = `${apiCase.service_date}T${fullStartTime}Z`;
 
   return {
     ...apiCase,
     status,
     submittedDateTime,
-    original_case_status: apiCase.case_status || '', // Ensure original_case_status is a string
+    original_case_status: apiCase.case_status || '',
   };
 };
 
@@ -59,46 +54,32 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
         const errorData = await response.json();
         errorMessage = errorData.message || errorData.detail || errorData.error || errorMessage;
       } catch (e) {
-        // Failed to parse JSON body or no specific message
-        errorMessage += ` - ${await response.text()}`; // Include raw text if JSON parsing fails
+        errorMessage += ` - ${await response.text()}`;
       }
       throw new Error(errorMessage);
     }
 
     const responseData = await response.json();
-    let tokenData: AuthToken;
 
-    // Handle various possible token response structures
-    if (responseData.access_token && responseData.expires_in !== undefined) {
-        tokenData = {
-            token: responseData.access_token,
-            expiresAt: Date.now() + responseData.expires_in * 1000,
-        };
-    } else if (responseData.token && responseData.expiresAt) { // expiresAt is already a timestamp
-        tokenData = {
-            token: responseData.token,
-            expiresAt: responseData.expiresAt,
-        };
-    } else if (responseData.token && responseData.expires_in !== undefined) { // expires_in is seconds
-         tokenData = {
-            token: responseData.token,
-            expiresAt: Date.now() + responseData.expires_in * 1000,
-        };
-    } else if (responseData.token) { // Only token provided, default expiry
-        tokenData = {
-            token: responseData.token,
-            expiresAt: Date.now() + 3600 * 1000, // Default to 1 hour
-        };
+    // Specifically handle the expected success response structure
+    if (responseData.status === 'success' && responseData.token) {
+      const tokenData: AuthToken = {
+        token: responseData.token,
+        // API does not provide expiration, so set a default (e.g., 1 hour)
+        expiresAt: Date.now() + 3600 * 1000,
+      };
+      return tokenData;
     } else {
-        console.error("Unexpected login response structure:", responseData);
-        throw new Error("Login successful, but token data is missing or in an unexpected format.");
+      // Handle other successful (HTTP 200) but unexpected JSON structures
+      console.error("Unexpected successful login response structure:", responseData);
+      const message = responseData.message || "Login successful, but token data is missing or in an unexpected format.";
+      throw new Error(message);
     }
-    return tokenData;
 
   } catch (error) {
     let detailedErrorMessage = 'An unknown error occurred during login.';
     if (error instanceof Error) {
-      detailedErrorMessage = error.message; // Original error message, e.g., "Failed to fetch"
+      detailedErrorMessage = error.message;
       if (error.message.toLowerCase().includes('failed to fetch')) {
         detailedErrorMessage = `Failed to fetch from ${LOGIN_ENDPOINT}. This can be due to network issues, an incorrect API endpoint, or CORS policy restrictions on the server. Please check your network connection, the API endpoint, and ensure the server at ${API_BASE_URL} allows requests from your current domain.`;
       }
@@ -124,7 +105,6 @@ export const getDoctors = async (token: string): Promise<Doctor[]> => {
       throw new Error(errorMessage);
     }
     const data: Doctor[] = await response.json();
-    // Filter out doctors with 'TEST' in their practiceName, case-insensitively
     return data.filter(doc => doc.practiceName && !doc.practiceName.toUpperCase().includes('TEST'));
   } catch (error) {
     console.error('API getDoctors Error:', error);
@@ -149,10 +129,9 @@ export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[
       throw new Error(errorMessage);
     }
     const apiCases: ApiCase[] = await response.json();
-    // Ensure doctorAccNos is not empty before filtering, and that apiCase.doctor_acc_no exists
-    const relevantApiCases = apiCases.filter(apiCase => 
-        apiCase.doctor_acc_no && 
-        doctorAccNos.length > 0 && 
+    const relevantApiCases = apiCases.filter(apiCase =>
+        apiCase.doctor_acc_no &&
+        doctorAccNos.length > 0 &&
         doctorAccNos.includes(apiCase.doctor_acc_no)
     );
     return relevantApiCases.map(processApiCase);
@@ -172,7 +151,7 @@ export const updateCaseStatus = async (token: string, caseId: number, newStatus:
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ case_status: newStatus }), // API expects 'case_status'
+      body: JSON.stringify({ case_status: newStatus }),
     });
     if (!response.ok) {
        let errorMessage = `Failed to update case status for case ID ${caseId} to ${newStatus}: ${response.status}`;
@@ -187,10 +166,6 @@ export const updateCaseStatus = async (token: string, caseId: number, newStatus:
   } catch (error) {
     console.error('API updateCaseStatus Error:', error);
     const message = error instanceof Error ? error.message : `An unknown error occurred while updating case status for case ID ${caseId}.`;
-    // To ensure the toast displays the error, we return a structure that implies failure but can still be handled.
-    // The calling component (DoctorCaseTable) expects a promise that resolves.
-    // It will check result.success.
-    // We throw here so the toast in DoctorCaseTable shows this specific error message.
-    throw new Error(message); 
+    throw new Error(message);
   }
 };
