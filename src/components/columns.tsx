@@ -2,7 +2,7 @@
 "use client";
 
 import type { ColumnDef, Row, Column } from "@tanstack/react-table";
-import { ArrowUpDown, MoreHorizontal, CheckCircle, Tag } from "lucide-react"; // Removed Clock, XCircle
+import { ArrowUpDown, MoreHorizontal, CheckCircle, Tag, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -44,8 +44,8 @@ export function DataTableColumnHeader<TData, TValue>({ column, title, className 
 
 const getStatusBadgeVariant = (status: CaseStatus): "default" | "secondary" | "destructive" | "outline" => {
   switch (status) {
-    case 'NEW': return 'outline'; // Neutral or blueish
-    case 'PROCESSED': return 'default'; // Often green-ish by default in themes
+    case 'NEW': return 'outline'; 
+    case 'PROCESSED': return 'default'; 
     default: return 'outline';
   }
 };
@@ -60,8 +60,8 @@ const getStatusBadgeIcon = (status: CaseStatus) => {
 
 
 export const getColumns = (
-  onUpdateStatus: (caseId: string, newStatus: CaseStatus) => Promise<void>,
-  isUpdatingStatus: (caseId: string) => boolean
+  onUpdateStatus: (caseId: number, newStatus: CaseStatus) => Promise<void>,
+  isUpdatingStatus: (caseId: number) => boolean
 ): ColumnDef<Case>[] => [
   {
     id: "select",
@@ -82,31 +82,32 @@ export const getColumns = (
         onCheckedChange={(value) => row.toggleSelected(!!value)}
         aria-label="Select row"
         className="translate-y-[2px]"
-        onClick={(e) => e.stopPropagation()} // Prevent row click when interacting with checkbox
+        onClick={(e) => e.stopPropagation()} 
       />
     ),
     enableSorting: false,
     enableHiding: false,
   },
   {
-    accessorKey: "caseNumber",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Case Number" />,
-    cell: ({ row }) => <div className="font-medium">{row.getValue("caseNumber")}</div>,
+    accessorKey: "id",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Case ID" />,
+    cell: ({ row }) => <div className="font-medium">{row.getValue("id")}</div>,
   },
   {
-    accessorKey: "patientName",
+    accessorKey: "patient_name",
     header: ({ column }) => <DataTableColumnHeader column={column} title="Patient Name" />,
   },
   {
-    accessorKey: "doctorName",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Doctor" />,
+    accessorKey: "treating_surgeon",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Treating Surgeon" />,
   },
   {
-    accessorKey: "submittedDate",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Submitted Date" />,
+    accessorKey: "service_date",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Service Date" />,
     cell: ({ row }) => {
-      const date = row.getValue("submittedDate");
+      const date = row.getValue("service_date");
       try {
+        // The service_date is already "YYYY-MM-DD", format expects a Date object or timestamp
         return format(new Date(date as string), "PP"); 
       } catch (error) {
         return date as string; 
@@ -114,19 +115,11 @@ export const getColumns = (
     },
   },
   {
-    accessorKey: "insuranceProvider",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Insurance Provider" />,
-  },
-  {
-    accessorKey: "amount",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" />,
+    accessorKey: "icd10_codes",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="ICD10 Codes" />,
     cell: ({ row }) => {
-      const amount = parseFloat(row.getValue("amount"));
-      const formatted = new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-      }).format(amount);
-      return <div className="text-right font-medium">{formatted}</div>;
+      const codes = row.getValue("icd10_codes") as string[];
+      return <div className="truncate max-w-[150px]">{codes?.join(', ') || 'N/A'}</div>;
     },
   },
   {

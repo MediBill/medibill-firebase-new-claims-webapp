@@ -1,3 +1,4 @@
+
 "use client";
 
 import type * as React from 'react';
@@ -5,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { AuthForm } from '@/components/auth-form';
 import { DoctorCaseTable } from '@/components/doctor-case-table';
 import { login as apiLogin, getDoctors, getAllCasesForDoctors, updateCaseStatus as apiUpdateCaseStatus } from '@/lib/medibill-api';
-import type { AuthToken, Doctor, Case, CaseStatus } from '@/types/medibill';
+import type { AuthToken, Doctor, Case, CaseStatus } from '@/types/medibill'; // Case is now the processed type
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -15,14 +16,12 @@ export default function MediBillPage() {
   const [authToken, setAuthToken] = useState<AuthToken | null>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [cases, setCases] = useState<Case[]>([]);
-  const [isLoading, setIsLoading] = useState(true); // Start true to show loading for initial auth check/form
+  const [isLoading, setIsLoading] = useState(true); 
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    // Simulate checking for an existing token (e.g., from localStorage)
-    // For this app, we always start with login.
-    setIsLoading(false); // Allow AuthForm to render
+    setIsLoading(false); 
   }, []);
 
   const handleLoginSuccess = (token: AuthToken) => {
@@ -38,8 +37,8 @@ export default function MediBillPage() {
       const fetchedDoctors = await getDoctors(token);
       setDoctors(fetchedDoctors);
       if (fetchedDoctors.length > 0) {
-        const doctorIds = fetchedDoctors.map(doc => doc.id);
-        const fetchedCases = await getAllCasesForDoctors(token, doctorIds);
+        const doctorAccNos = fetchedDoctors.map(doc => doc.id); // Assuming doc.id is the account number
+        const fetchedCases = await getAllCasesForDoctors(token, doctorAccNos);
         setCases(fetchedCases);
       } else {
         setCases([]);
@@ -54,12 +53,13 @@ export default function MediBillPage() {
     }
   };
 
-  const handleUpdateCaseStatus = async (caseId: string, newStatus: CaseStatus): Promise<{ success: boolean; updatedCase?: Case }> => {
+  // This function is passed to DoctorCaseTable, which now expects caseId as number
+  const handleUpdateCaseStatus = async (caseId: number, newStatus: CaseStatus): Promise<{ success: boolean; updatedCase?: Case }> => {
     if (!authToken) {
-      throw new Error("Not authenticated");
+      // This should ideally be handled by disabling UI elements if not authenticated
+      toast({ title: "Authentication Error", description: "Not authenticated.", variant: "destructive" });
+      return { success: false };
     }
-    // The actual API call is now wrapped and handled within DoctorCaseTable for local state management,
-    // but the API function itself is passed down.
     return apiUpdateCaseStatus(authToken.token, caseId, newStatus);
   };
 
@@ -83,9 +83,7 @@ export default function MediBillPage() {
     );
   }
   
-  // isLoading for the table component is now managed by DoctorCaseTable using its 'initialLoading' prop.
-  // page.tsx's isLoading state is for the initial login->data fetch sequence.
-  if (isLoading && cases.length === 0) { // Show page-level loader only if no cases yet and still loading.
+  if (isLoading && cases.length === 0) { 
     return (
       <div className="flex justify-center items-center min-h-[calc(100vh-200px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -94,15 +92,14 @@ export default function MediBillPage() {
     );
   }
 
-
   return (
     <div className="container mx-auto py-2">
       <h2 className="text-3xl font-bold tracking-tight mb-6 text-center text-primary">Doctor Case Submissions</h2>
       <DoctorCaseTable 
         data={cases} 
-        updateCaseStatusApi={(tokenFromTable, caseId, newStatus) => apiUpdateCaseStatus(tokenFromTable, caseId, newStatus)} // Pass the raw API function
+        updateCaseStatusApi={(tokenFromTable, caseId, newStatus) => apiUpdateCaseStatus(tokenFromTable, caseId, newStatus)}
         authToken={authToken.token}
-        isLoading={isLoading && cases.length === 0} // Pass initial loading state to table
+        isLoading={isLoading && cases.length === 0} 
       />
     </div>
   );

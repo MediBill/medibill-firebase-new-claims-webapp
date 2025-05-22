@@ -17,7 +17,7 @@ import {
   type Row,
 } from "@tanstack/react-table";
 import * as XLSX from 'xlsx';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
 import {
   Table,
@@ -39,7 +39,7 @@ import { CaseDetailSheet } from "./case-detail-sheet";
 
 interface DoctorCaseTableProps {
   data: Case[];
-  updateCaseStatusApi: (token: string, caseId: string, newStatus: CaseStatus) => Promise<{ success: boolean; updatedCase?: Case }>;
+  updateCaseStatusApi: (token: string, caseId: number, newStatus: CaseStatus) => Promise<{ success: boolean; updatedCase?: Case }>;
   authToken: string | null;
   isLoading: boolean;
 }
@@ -47,18 +47,23 @@ interface DoctorCaseTableProps {
 export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoading: initialLoading }: DoctorCaseTableProps) {
   const { toast } = useToast();
   const [rowSelection, setRowSelection] = React.useState({});
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
+     // Example: Hide doctor_acc_no by default if it's too technical for main view
+     // doctor_acc_no: false, 
+  });
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([
     {
       id: 'status',
       value: 'NEW',
     }
   ]);
-  const [sorting, setSorting] = React.useState<SortingState>([]);
+  const [sorting, setSorting] = React.useState<SortingState>([
+    { id: 'service_date', desc: true } // Sort by service_date descending by default
+  ]);
   const [globalFilter, setGlobalFilter] = React.useState(''); 
 
   const [isExporting, setIsExporting] = React.useState(false);
-  const [updatingStatusMap, setUpdatingStatusMap] = React.useState<Record<string, boolean>>({});
+  const [updatingStatusMap, setUpdatingStatusMap] = React.useState<Record<number, boolean>>({}); // Case ID is now number
   const [tableData, setTableData] = React.useState<Case[]>(data);
 
   const [selectedCase, setSelectedCase] = React.useState<Case | null>(null);
@@ -69,7 +74,16 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
   }, [data]);
 
 
-  const handleUpdateStatus = async (caseId: string, newStatus: CaseStatus) => {
+  const handleUpdateStatusInTableAndSheet = (caseId: number, newStatus: CaseStatus, updatedCase?: Case) => {
+    setTableData(prevData => 
+        prevData.map(c => (c.id === caseId && updatedCase ? { ...c, ...updatedCase, status: newStatus } : c))
+    );
+    if (selectedCase && selectedCase.id === caseId) {
+        setSelectedCase(prev => prev ? { ...prev, status: newStatus, ...(updatedCase || {}) } : null);
+    }
+  };
+
+  const handleUpdateStatus = async (caseId: number, newStatus: CaseStatus) => {
     if (!authToken) {
       toast({ title: "Error", description: "Authentication token not found.", variant: "destructive" });
       return;
@@ -78,13 +92,10 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
     try {
       const result = await updateCaseStatusApi(authToken, caseId, newStatus);
       if (result.success && result.updatedCase) {
-        setTableData(prevData => prevData.map(c => c.id === caseId ? { ...c, ...result.updatedCase } : c));
-        if (selectedCase && selectedCase.id === caseId) {
-            setSelectedCase({...selectedCase, status: newStatus}); // Update status in sheet if open
-        }
-        toast({ title: "Success", description: `Case ${result.updatedCase.caseNumber} status updated to ${newStatus}.` });
+        handleUpdateStatusInTableAndSheet(caseId, newStatus, result.updatedCase);
+        toast({ title: "Success", description: `Case ID ${result.updatedCase.id} status updated to ${newStatus}.` });
       } else {
-        throw new Error("Failed to update status.");
+        throw new Error("Failed to update status from API.");
       }
     } catch (error) {
       toast({ title: "Error updating status", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
@@ -93,9 +104,9 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
     }
   };
   
-  const isUpdatingStatus = (caseId: string) => !!updatingStatusMap[caseId];
+  const isUpdatingStatus = (caseId: number) => !!updatingStatusMap[caseId];
 
-  const columns = React.useMemo(() => getColumns(handleUpdateStatus, isUpdatingStatus), [authToken, tableData]); // Added tableData to dependencies
+  const columns = React.useMemo(() => getColumns(handleUpdateStatus, isUpdatingStatus), [authToken, tableData]); 
 
   const table = useReactTable({
     data: tableData,
@@ -119,6 +130,10 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
     getSortedRowModel: getSortedRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
+    meta: { // Pass functions or data to columns
+        updateStatus: handleUpdateStatus,
+        isUpdatingStatus: isUpdatingStatus,
+    }
   });
 
   const handleExport = () => {
@@ -126,14 +141,19 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
     try {
       const dataToExport = table.getFilteredRowModel().rows.map(row => {
         const originalData = row.original as Case;
+        // Map to a simpler structure for export, include more fields if needed
         return {
-          "Case Number": originalData.caseNumber,
-          "Patient Name": originalData.patientName,
-          "Doctor": originalData.doctorName,
-          "Submitted Date": format(new Date(originalData.submittedDate), "yyyy-MM-dd"),
-          "Insurance Provider": originalData.insuranceProvider,
-          "Amount": originalData.amount,
+          "Case ID": originalData.id,
+          "Patient Name": originalData.patient_name,
+          "Treating Surgeon": originalData.treating_surgeon,
+          "Service Date": originalData.service_date ? format(parseISO(originalData.submittedDateTime), "yyyy-MM-dd") : "N/A",
+          "Start Time": originalData.start_time || "N/A",
+          "End Time": originalData.end_time || "N/A",
           "Status": originalData.status,
+          "ICD10 Codes": originalData.icd10_codes?.join(', ') || "N/A",
+          "Procedure Codes": originalData.procedure_codes?.join(', ') || "N/A",
+          "Notes": originalData.notes || "N/A",
+          // Add more fields from originalData as required for export
         };
       });
 
@@ -143,6 +163,7 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
       XLSX.writeFile(workbook, "MediBill_Cases_Export.xlsx");
       toast({ title: "Export Successful", description: "Case data has been exported to Excel." });
     } catch (error) {
+      console.error("Export error:", error);
       toast({ title: "Export Failed", description: "An error occurred during export.", variant: "destructive" });
     } finally {
       setIsExporting(false);
@@ -182,7 +203,7 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
   }
 
   return (
-    <div className="space-y-4 p-4 border rounded-lg shadow-sm bg-card mt-6"> {/* Added mt-6 for spacing after header removal */}
+    <div className="space-y-4 p-4 border rounded-lg shadow-sm bg-card mt-6">
       <DataTableToolbar table={table} onExport={handleExport} isExporting={isExporting} />
       <div className="rounded-md border shadow-inner">
         <Table>
@@ -210,15 +231,17 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className="hover:bg-muted/30 cursor-pointer"
+                  className="hover:bg-accent/20 cursor-pointer transition-colors" // Enhanced hover effect
                   onClick={(event) => {
                     let target = event.target as HTMLElement;
                     let isInteractiveClick = false;
+                    // Check if the click originated from an interactive element within the row
                     while (target && target !== event.currentTarget) {
                         if (target.dataset.radixSelectTrigger !== undefined || 
                             target.closest('[data-radix-select-content]') !== null ||
                             target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'checkbox' ||
-                            target.closest('button') !== null) { // Added check for any button click within the row
+                            target.closest('button:not([data-disables-row-click="true"])') !== null || // Check for buttons, allow disabling row click for specific buttons
+                            target.closest('[role="menuitem"]') !== null ) {
                             isInteractiveClick = true;
                             break;
                         }
@@ -255,13 +278,15 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
       <DataTablePagination table={table} />
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="w-full sm:max-w-lg p-0 overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-2xl p-0 flex flex-col"> {/* Increased width to 2xl */}
           {selectedCase && (
             <CaseDetailSheet 
               caseDetails={selectedCase} 
               onClose={() => setIsSheetOpen(false)}
               onUpdateStatus={async (newStatus) => {
                 if (selectedCase && authToken) {
+                  // Optimistically update sheet, table will update on success
+                  setSelectedCase(prev => prev ? {...prev, status: newStatus} : null);
                   await handleUpdateStatus(selectedCase.id, newStatus);
                 }
               }}
