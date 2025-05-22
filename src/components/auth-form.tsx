@@ -12,13 +12,13 @@ import type { AuthToken } from '@/types/medibill';
 
 interface AuthFormProps {
   onLoginSuccess: (token: AuthToken) => void;
-  // loginApiCall now only needs the password, as email is fixed
+  // loginApiCall now only needs the password
   loginApiCall: (password: string) => Promise<AuthToken>;
 }
 
 export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
-  // Email is no longer a state, password defaults to the required one.
-  const [password, setPassword] = useState('apt@123!');
+  // Password defaults to "Onejuly2021"
+  const [password, setPassword] = useState('Onejuly2021');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +27,6 @@ export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
     setIsLoading(true);
     setError(null);
     try {
-      // Email is hardcoded or handled within loginApiCall, just pass password
       const authToken = await loginApiCall(password);
       onLoginSuccess(authToken);
     } catch (err) {
@@ -48,7 +47,6 @@ export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
-            {/* Email input removed */}
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input
