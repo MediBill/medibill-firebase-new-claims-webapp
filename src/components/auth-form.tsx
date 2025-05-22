@@ -1,3 +1,4 @@
+
 "use client";
 
 import type * as React from 'react';
@@ -37,8 +38,8 @@ export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
     <div className="flex justify-center items-center min-h-[calc(100vh-200px)]">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader>
-          <CardTitle className="text-2xl text-center">MediBill API Login</CardTitle>
-          <CardDescription className="text-center">
+          {/* <CardTitle className="text-2xl text-center">MediBill API Login</CardTitle> */}
+          <CardDescription className="text-center pt-4"> {/* Added padding-top for spacing */}
             Enter the default password to access case data.
           </CardDescription>
         </CardHeader>
@@ -67,3 +68,4 @@ export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
     </div>
   );
 }
+
