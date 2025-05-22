@@ -1,0 +1,5 @@
+build:
+  env:
+    MEDIBILL_API_PASSWORD: 'apt@123!'
+    NEXT_PUBLIC_MEDIBILL_API_BASE_URL: 'https://api.medibill.co.za/api/v1'
+    NEXT_PUBLIC_MEDIBILL_APP_EMAIL: 'medibill.developer@gmail.com'

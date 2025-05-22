@@ -1,17 +1,17 @@
 
 import type { AuthToken, Doctor, Case, CaseStatus, ApiCase } from '@/types/medibill';
 
-// The API_BASE_URL is now correctly set to include /v1
-const API_BASE_URL = 'https://api.medibill.co.za/api/v1';
+// API Endpoints configuration using environment variables
+const API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL as string;
 const LOGIN_ENDPOINT = `${API_BASE_URL}/auth/login`;
 const DOCTORS_ENDPOINT = `${API_BASE_URL}/doctors`;
 const CASES_ENDPOINT = `${API_BASE_URL}/cases`;
-const UPDATE_CASE_ENDPOINT_TEMPLATE = `${API_BASE_URL}/cases/{caseId}/status`;
+const UPDATE_CASE_STATUS_ENDPOINT_TEMPLATE = `${CASES_ENDPOINT}/{caseId}/status`;
 
 // Hardcoded email for the login process
-const APP_EMAIL = 'medibill.developer@gmail.com';
+const APP_EMAIL = process.env.NEXT_PUBLIC_MEDIBILL_APP_EMAIL as string;
 // Hardcoded password for the API authentication, as per requirement
-const API_PASSWORD = 'apt@123!';
+const API_PASSWORD = process.env.MEDIBILL_API_PASSWORD as string;
 
 const processApiCase = (apiCase: ApiCase): Case => {
   let status: CaseStatus = 'NEW'; // Default for empty or unrecognized case_status
@@ -36,7 +36,7 @@ const processApiCase = (apiCase: ApiCase): Case => {
   };
 };
 
-// The 'passwordFromForm' parameter is received but API_PASSWORD is used for the actual API call.
+// Authenticates the user with the API using hardcoded credentials (as per current requirement)
 export const login = async (passwordFromForm: string): Promise<AuthToken> => {
   try {
     const response = await fetch(LOGIN_ENDPOINT, {
@@ -49,16 +49,16 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
     });
 
     if (!response.ok) {
+      const errorText = await response.text(); // Read body as text once
       let errorMessage = `Login failed with status: ${response.status}`;
       try {
-        const errorData = await response.json();
-        errorMessage = errorData.message || errorData.detail || errorData.error || errorMessage;
-      } catch (e) {
-        errorMessage += ` - ${await response.text()}`;
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.message || errorData.detail || errorData.error || errorText || errorMessage;
+      } catch (e) { // JSON parsing failed, use raw text
+        errorMessage += ` - ${errorText}`;
       }
       throw new Error(errorMessage);
     }
-
     const responseData = await response.json();
 
     // Specifically handle the expected success response structure
@@ -78,13 +78,12 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
 
   } catch (error) {
     let detailedErrorMessage = 'An unknown error occurred during login.';
+    // Check if it's a network error (e.g., failed to fetch)
     if (error instanceof Error) {
       detailedErrorMessage = error.message;
-      if (error.message.toLowerCase().includes('failed to fetch')) {
-        detailedErrorMessage = `Failed to fetch from ${LOGIN_ENDPOINT}. This can be due to network issues, an incorrect API endpoint, or CORS policy restrictions on the server. Please check your network connection, the API endpoint, and ensure the server at ${API_BASE_URL} allows requests from your current domain.`;
-      }
     }
     console.error('API Login Error:', detailedErrorMessage, error);
+    // Re-throw a new Error with a clearer message if it was a network issue, otherwise re-throw the original error message.
     throw new Error(detailedErrorMessage);
   }
 };
@@ -97,12 +96,13 @@ export const getDoctors = async (token: string): Promise<Doctor[]> => {
       },
     });
     if (!response.ok) {
+      const errorText = await response.text(); // Read body as text once
       let errorMessage = `Failed to fetch doctors: ${response.status}`;
       try {
-        const errorData = await response.json();
-        errorMessage = errorData.message || errorData.detail || errorMessage;
-      } catch (e) { errorMessage += ` - ${await response.text()}`; }
-      throw new Error(errorMessage);
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.message || errorData.detail || errorText || errorMessage;
+      } catch (e) { errorMessage += ` - ${errorText}`; } // JSON parsing failed, use raw text
+      throw new Error(errorMessage || `Failed to fetch doctors with status: ${response.status}`);
     }
     const data: Doctor[] = await response.json();
     return data.filter(doc => doc.practiceName && !doc.practiceName.toUpperCase().includes('TEST'));
@@ -121,12 +121,13 @@ export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[
       },
     });
     if (!response.ok) {
+      const errorText = await response.text(); // Read body as text once
       let errorMessage = `Failed to fetch cases: ${response.status}`;
       try {
-        const errorData = await response.json();
-        errorMessage = errorData.message || errorData.detail || errorMessage;
-      } catch (e) { errorMessage += ` - ${await response.text()}`; }
-      throw new Error(errorMessage);
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.message || errorData.detail || errorText || errorMessage;
+      } catch (e) { errorMessage += ` - ${errorText}`; } // JSON parsing failed, use raw text
+      throw new Error(errorMessage || `Failed to fetch cases with status: ${response.status}`);
     }
     const apiCases: ApiCase[] = await response.json();
     const relevantApiCases = apiCases.filter(apiCase =>
@@ -143,7 +144,7 @@ export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[
 };
 
 export const updateCaseStatus = async (token: string, caseId: number, newStatus: CaseStatus): Promise<{ success: boolean; updatedCase?: Case }> => {
-  const url = UPDATE_CASE_ENDPOINT_TEMPLATE.replace('{caseId}', caseId.toString());
+  const url = UPDATE_CASE_STATUS_ENDPOINT_TEMPLATE.replace('{caseId}', caseId.toString());
   try {
     const response = await fetch(url, {
       method: 'PUT',
@@ -154,12 +155,13 @@ export const updateCaseStatus = async (token: string, caseId: number, newStatus:
       body: JSON.stringify({ case_status: newStatus }),
     });
     if (!response.ok) {
+       const errorText = await response.text(); // Read body as text once
        let errorMessage = `Failed to update case status for case ID ${caseId} to ${newStatus}: ${response.status}`;
        try {
-         const errorData = await response.json();
-         errorMessage = errorData.message || errorData.detail || errorMessage;
-       } catch (e) { errorMessage += ` - ${await response.text()}`; }
-       throw new Error(errorMessage);
+         const errorData = JSON.parse(errorText);
+         errorMessage = errorData.message || errorData.detail || errorText || errorMessage;
+       } catch (e) { errorMessage += ` - ${errorText}`; } // JSON parsing failed, use raw text
+       throw new Error(errorMessage || `Failed to update case status for case ID ${caseId} with status: ${response.status}`);
     }
     const updatedApiCase: ApiCase = await response.json();
     return { success: true, updatedCase: processApiCase(updatedApiCase) };
@@ -167,5 +169,33 @@ export const updateCaseStatus = async (token: string, caseId: number, newStatus:
     console.error('API updateCaseStatus Error:', error);
     const message = error instanceof Error ? error.message : `An unknown error occurred while updating case status for case ID ${caseId}.`;
     throw new Error(message);
+  }
+};
+
+export const updateCase = async (token: string, caseId: number, updatedCaseData: Partial<ApiCase>): Promise<Case> => {
+  const url = `${API_BASE_URL}/cases/submissions/update/${caseId}`;
+  try {
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updatedCaseData),
+    });
+    if (!response.ok) {
+      const errorText = await response.text(); // Read body as text once
+      let errorMessage = `Failed to update case ${caseId}: ${response.status}`;
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.message || errorData.detail || errorText || errorMessage;
+      } catch (e) { errorMessage += ` - ${errorText}`; } // JSON parsing failed, use raw text
+      throw new Error(errorMessage || `Failed to update case ${caseId} with status: ${response.status}`);
+    }
+    const updatedApiCase: ApiCase = await response.json();
+    return processApiCase(updatedApiCase);
+  } catch (error) {
+    console.error(`API updateCase Error for case ID ${caseId}:`, error);
+    throw error instanceof Error ? error : new Error(`An unknown error occurred while updating case ${caseId}.`);
   }
 };
