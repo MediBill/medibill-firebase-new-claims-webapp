@@ -94,19 +94,6 @@ export const getColumns = (
     cell: ({ row }) => <div className="font-medium">{row.getValue("id")}</div>,
   },
   {
-    accessorKey: "patient_name",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Patient Name" />,
-  },
-  {
-    accessorKey: "treating_surgeon",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Treating Surgeon" />,
-  },
-  {
-    accessorKey: "doctor_acc_no",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Doctor Acc No" />,
-    cell: ({ row }) => <div>{row.getValue("doctor_acc_no")}</div>,
-  },
-  {
     accessorKey: "service_date",
     header: ({ column }) => <DataTableColumnHeader column={column} title="Service Date" />,
     cell: ({ row }) => {
@@ -118,6 +105,19 @@ export const getColumns = (
         return date as string; 
       }
     },
+  },
+  {
+    accessorKey: "doctor_acc_no",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Doctor Acc No" />,
+    cell: ({ row }) => <div>{row.getValue("doctor_acc_no")}</div>,
+  },
+  {
+    accessorKey: "patient_name",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Patient Name" />,
+  },
+  {
+    accessorKey: "treating_surgeon",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Treating Surgeon" />,
   },
   {
     accessorKey: "status",
@@ -162,4 +162,3 @@ export const getColumns = (
     },
   },
 ];
-

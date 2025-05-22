@@ -94,7 +94,7 @@ export default function MediBillPage() {
 
   return (
     <div className="container mx-auto py-2">
-      <h2 className="text-3xl font-bold tracking-tight mb-6 text-center text-primary">Doctor Case Submissions</h2>
+      {/* Title "Doctor Case Submissions" removed from here */}
       <DoctorCaseTable 
         data={cases} 
         updateCaseStatusApi={(tokenFromTable, caseId, newStatus) => apiUpdateCaseStatus(tokenFromTable, caseId, newStatus)}
