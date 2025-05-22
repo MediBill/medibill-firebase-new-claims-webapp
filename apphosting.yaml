@@ -16,7 +16,7 @@ env:
     availability:
       - BUILD
       - RUNTIME
-  - variable: MEDIBILL_API_PASSWORD
+  - variable: NEXT_PUBLIC_MEDIBILL_API_PASSWORD
     value: "apt@123!"
     availability:
       - BUILD

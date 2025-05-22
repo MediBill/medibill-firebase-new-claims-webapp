@@ -7,7 +7,7 @@ const APP_EMAIL = process.env.NEXT_PUBLIC_MEDIBILL_APP_EMAIL;
 // MEDIBILL_API_PASSWORD is a build-time env var.
 // It's captured here in the module scope. If this module is bundled for the client,
 // its value will be what was available at build time.
-const API_PASSWORD = process.env.MEDIBILL_API_PASSWORD;
+const API_PASSWORD = process.env.NEXT_PUBLIC_MEDIBILL_API_PASSWORD;
 
 // Initial check for critical configuration
 if (!API_BASE_URL_FROM_ENV || typeof API_BASE_URL_FROM_ENV !== 'string' || !API_BASE_URL_FROM_ENV.startsWith('http')) {
@@ -251,4 +251,3 @@ export const updateCase = async (token: string, caseId: number, updatedCaseData:
     throw error instanceof Error ? error : new Error(`An unknown error occurred while updating case ${caseId}.`);
   }
 };
-    
