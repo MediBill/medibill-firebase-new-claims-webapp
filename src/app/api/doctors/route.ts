@@ -1,6 +1,7 @@
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import type { Doctor } from '@/types/medibill';
 
 const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
 
@@ -37,6 +38,17 @@ export async function GET(request: NextRequest) {
         { status: externalApiResponse.status }
       );
     }
+
+    // Ensure the response data is an array, as expected by the client
+    if (!Array.isArray(responseData)) {
+      console.error(`[API Doctors Route] External API at ${DOCTORS_ENDPOINT_EXTERNAL} did not return an array for doctors:`, responseData);
+      // Attempt to see if it's a common wrapper object like { doctors: [] }
+      if (responseData && typeof responseData === 'object' && Array.isArray(responseData.doctors)) {
+        return NextResponse.json(responseData.doctors, { status: 200 });
+      }
+      return NextResponse.json({ message: 'Received malformed doctor data from external API.' }, { status: 502 }); // Bad Gateway
+    }
+    
     return NextResponse.json(responseData, { status: 200 });
   } catch (error) {
     console.error('[API Doctors Route] Internal error during doctors proxy:', error);
@@ -47,3 +59,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message }, { status: 500 });
   }
 }
+

@@ -10,23 +10,29 @@ const INTERNAL_CASES_ENDPOINT = '/api/cases'; // Will be a POST to send doctorAc
 const INTERNAL_CASE_STATUS_UPDATE_ENDPOINT_TEMPLATE = '/api/cases/[caseId]/status';
 const INTERNAL_CASE_GENERAL_UPDATE_ENDPOINT_TEMPLATE = '/api/cases/[caseId]/update';
 
+// Environment variables for direct external API calls (if any were left, but now proxied)
+// These are primarily used by the server-side proxies now.
+const APP_EMAIL = process.env.NEXT_PUBLIC_MEDIBILL_APP_EMAIL;
+const API_PASSWORD = process.env.NEXT_PUBLIC_MEDIBILL_API_PASSWORD;
+
 
 const processApiCase = (apiCase: ApiCase): Case => {
   let status: CaseStatus = 'NEW';
+  // API might send empty string for case_status, which should default to NEW
   if (apiCase.case_status === 'PROCESSED') {
     status = 'PROCESSED';
-  } else if (apiCase.case_status === 'NEW' || !apiCase.case_status) { // API might send "" for new
+  } else if (apiCase.case_status === 'NEW' || apiCase.case_status === '' || !apiCase.case_status) {
     status = 'NEW';
   }
 
   const validServiceDate = apiCase.service_date && apiCase.service_date.match(/^\d{4}-\d{2}-\d{2}$/) ? apiCase.service_date : '1970-01-01';
-  const validStartTimeString = apiCase.start_time && apiCase.start_time.match(/^\d{2}:\d{2}(:\d{2})?$/)
-    ? apiCase.start_time
-    : '00:00:00';
   
-  const fullStartTime = validStartTimeString.length === 5 ? `${validStartTimeString}:00` : validStartTimeString;
-
-  const submittedDateTime = `${validServiceDate}T${fullStartTime}Z`; // Ensure 'Z' for UTC interpretation if no timezone info
+  let validStartTimeString = '00:00:00';
+  if (apiCase.start_time && apiCase.start_time.match(/^\d{2}:\d{2}(:\d{2})?$/)) {
+    validStartTimeString = apiCase.start_time.length === 5 ? `${apiCase.start_time}:00` : apiCase.start_time;
+  }
+  
+  const submittedDateTime = `${validServiceDate}T${validStartTimeString}Z`;
 
   return {
     ...apiCase,
@@ -45,9 +51,7 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
       headers: {
         'Content-Type': 'application/json',
       },
-      // The password from the form is sent to our internal API route.
-      // The internal API route then uses the configured credentials for the external API.
-      body: JSON.stringify({ password: passwordFromForm }),
+      body: JSON.stringify({ password: passwordFromForm }), // Password from form is sent to our proxy
     });
 
     const responseData = await response.json();
@@ -62,7 +66,6 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
       throw new Error(errMsg);
     }
 
-    // Expecting { token: "...", expiresAt: "..." } from our internal API route
     if (responseData.token && responseData.expiresAt) {
        console.log('[MediBill API Client] Login via internal proxy successful.');
       return responseData as AuthToken;
@@ -93,6 +96,7 @@ export const getDoctors = async (token: string): Promise<Doctor[]> => {
         'Authorization': `Bearer ${token}`,
       },
     });
+
     if (!response.ok) {
       const errorText = await response.text();
       let errorMessage = `Failed to fetch doctors via proxy ${INTERNAL_DOCTORS_ENDPOINT}: ${response.status}`;
@@ -100,11 +104,21 @@ export const getDoctors = async (token: string): Promise<Doctor[]> => {
         const errorData = JSON.parse(errorText);
         errorMessage += ` - Server: ${errorData.message || errorData.detail || errorText}`;
       } catch (e) { errorMessage += ` - Body: ${errorText.substring(0,200)}...`; }
+      console.error(errorMessage); // Log the constructed error message
       throw new Error(errorMessage);
     }
-    const data: Doctor[] = await response.json();
-    // Filtering logic remains, as it's business logic not specific to API call
-    return data.filter(doc => doc.practiceName && !doc.practiceName.toUpperCase().includes('TEST'));
+
+    const responseData = await response.json();
+
+    if (Array.isArray(responseData)) {
+      const doctors: Doctor[] = responseData;
+      return doctors.filter(doc => doc.practiceName && !doc.practiceName.toUpperCase().includes('TEST'));
+    } else {
+      // This case should ideally be handled by the server proxy, but as a fallback:
+      console.warn(`[MediBill API Client] getDoctors (via proxy) received non-array data from ${INTERNAL_DOCTORS_ENDPOINT}:`, responseData);
+      return []; // Return an empty array to prevent runtime error
+    }
+
   } catch (error) {
     console.error(`API getDoctors (via proxy) Error from ${INTERNAL_DOCTORS_ENDPOINT}:`, error);
     if (error instanceof Error) throw error;
@@ -116,13 +130,14 @@ export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[
   console.log(`[MediBill API Client] Fetching cases via internal proxy: ${INTERNAL_CASES_ENDPOINT}`);
   try {
     const response = await fetch(INTERNAL_CASES_ENDPOINT, {
-      method: 'POST', // Using POST to send doctorAccNos in the body
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ doctorAccNos }),
     });
+
     if (!response.ok) {
       const errorText = await response.text();
       let errorMessage = `Failed to fetch cases via proxy ${INTERNAL_CASES_ENDPOINT}: ${response.status}`;
@@ -130,12 +145,21 @@ export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[
         const errorData = JSON.parse(errorText);
         errorMessage += ` - Server: ${errorData.message || errorData.detail || errorText}`;
       } catch (e) { errorMessage += ` - Body: ${errorText.substring(0,200)}...`; }
+      console.error(errorMessage);
       throw new Error(errorMessage);
     }
-    // The server-side proxy now handles filtering if doctorAccNos are provided.
-    // The response will be ApiCase[] which needs processing.
-    const apiCases: ApiCase[] = await response.json();
-    return apiCases.map(processApiCase);
+
+    const responseData = await response.json();
+    
+    if (Array.isArray(responseData)) {
+        const apiCases: ApiCase[] = responseData;
+        return apiCases.map(processApiCase);
+    } else {
+        // This case should ideally be handled by the server proxy returning a consistent array
+        console.warn(`[MediBill API Client] getAllCasesForDoctors (via proxy) received non-array data from ${INTERNAL_CASES_ENDPOINT}:`, responseData);
+        return []; // Return an empty array
+    }
+
   } catch (error) {
     console.error(`API getAllCasesForDoctors (via proxy) Error from ${INTERNAL_CASES_ENDPOINT}:`, error);
     if (error instanceof Error) throw error;
@@ -163,6 +187,7 @@ export const updateCaseStatus = async (token: string, caseId: number, newStatus:
          const errorData = JSON.parse(errorText);
          errorMessage += ` - Server: ${errorData.message || errorData.detail || errorText}`;
        } catch (e) { errorMessage += ` - Body: ${errorText.substring(0,200)}...`; }
+       console.error(errorMessage);
        throw new Error(errorMessage);
     }
     const updatedApiCase: ApiCase = await response.json();
@@ -185,7 +210,7 @@ export const updateCase = async (token: string, caseId: number, updatedCaseData:
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(updatedCaseData), // Send the whole partial ApiCase object
+      body: JSON.stringify(updatedCaseData),
     });
     if (!response.ok) {
       const errorText = await response.text();
@@ -194,6 +219,7 @@ export const updateCase = async (token: string, caseId: number, updatedCaseData:
         const errorData = JSON.parse(errorText);
         errorMessage += ` - Server: ${errorData.message || errorData.detail || errorText}`;
       } catch (e) { errorMessage += ` - Body: ${errorText.substring(0,200)}...`; }
+      console.error(errorMessage);
       throw new Error(errorMessage);
     }
     const updatedApiCase: ApiCase = await response.json();
