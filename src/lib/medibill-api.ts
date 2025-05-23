@@ -80,7 +80,6 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
   try {
     const response = await fetch(LOGIN_ENDPOINT, {
       method: 'POST',
-      mode: 'cors', // Explicitly set mode
       headers: {
         'Content-Type': 'application/json',
       },
