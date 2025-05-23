@@ -3,13 +3,11 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import type { ApiCase } from '@/types/medibill';
 
-const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
+// Hardcoded value for testing
+const EXTERNAL_API_BASE_URL = "https://api.medibill.co.za/api/v1";
 
 export async function POST(request: NextRequest) {
-  if (!EXTERNAL_API_BASE_URL || !EXTERNAL_API_BASE_URL.startsWith('http')) {
-    console.error('[API Cases Route Error] NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL:', EXTERNAL_API_BASE_URL);
-    return NextResponse.json({ message: 'Server configuration error: API base URL not set for cases proxy.' }, { status: 500 });
-  }
+  // Environment variable check is removed as value is hardcoded above
 
   const token = request.headers.get('Authorization')?.split('Bearer ')[1];
   if (!token) {
@@ -32,19 +30,22 @@ export async function POST(request: NextRequest) {
     console.warn('[API Cases Route] Could not parse doctorAccNos from request body or body is not JSON. Fetching all cases for the user.');
   }
 
-  const CASES_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}cases`;
+  const CASES_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases`;
   console.log(`[API Cases Route] Proxied request to external API: ${CASES_ENDPOINT_EXTERNAL}`);
 
   try {
+    // The external API for cases is a GET request.
+    // If filtering by doctor_acc_no is supported by the external API via query params, it should be added here.
+    // For now, fetching all cases for the user and filtering server-side if doctorAccNos are provided.
     const externalApiResponse = await fetch(CASES_ENDPOINT_EXTERNAL, {
-      method: 'GET', // External API is GET
+      method: 'GET', 
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
 
-    const responseDataText = await externalApiResponse.text(); // Read as text first for robust logging
+    const responseDataText = await externalApiResponse.text(); 
     let responseData: ApiCase[];
 
     try {
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     if (!externalApiResponse.ok) {
       console.error(`[API Cases Route] External API error from ${CASES_ENDPOINT_EXTERNAL} with status ${externalApiResponse.status}:`, responseData);
-      const errorBody = responseData as any; // Type assertion for error handling
+      const errorBody = responseData as any; 
       return NextResponse.json(
         { message: errorBody.message || errorBody.detail || `External API error for cases: ${externalApiResponse.status}` },
         { status: externalApiResponse.status }

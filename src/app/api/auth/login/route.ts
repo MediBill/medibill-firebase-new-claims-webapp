@@ -3,30 +3,20 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import type { AuthToken } from '@/types/medibill';
 
-const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
-const APP_EMAIL = process.env.NEXT_PUBLIC_MEDIBILL_APP_EMAIL;
-const API_PASSWORD = process.env.NEXT_PUBLIC_MEDIBILL_API_PASSWORD;
+// Hardcoded values for testing
+const EXTERNAL_API_BASE_URL = "https://api.medibill.co.za/api/v1";
+const APP_EMAIL = "medibill.developer@gmail.com";
+const API_PASSWORD = "apt@123!";
 
 export async function POST(request: NextRequest) {
-  if (!EXTERNAL_API_BASE_URL || !EXTERNAL_API_BASE_URL.startsWith('http')) {
-    console.error('[API Route Error] NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL:', EXTERNAL_API_BASE_URL);
-    return NextResponse.json({ message: 'Server configuration error: API base URL not set.' }, { status: 500 });
-  }
-  if (!APP_EMAIL) {
-    console.error('[API Route Error] NEXT_PUBLIC_MEDIBILL_APP_EMAIL is not set.');
-    return NextResponse.json({ message: 'Server configuration error: App email not set.' }, { status: 500 });
-  }
-  if (!API_PASSWORD) {
-    console.error('[API Route Error] NEXT_PUBLIC_MEDIBILL_API_PASSWORD is not set.');
-    return NextResponse.json({ message: 'Server configuration error: API password not set.' }, { status: 500 });
-  }
+  // Environment variable checks are removed as values are hardcoded above
 
-  const LOGIN_ENDPOINT = `${EXTERNAL_API_BASE_URL}auth/login`;
+  const LOGIN_ENDPOINT = `${EXTERNAL_API_BASE_URL}/auth/login`;
 
   try {
     // const { password: passwordFromClient } = await request.json();
-    // Although the client sends a password, we are instructed to use the hardcoded API_PASSWORD for the external call.
-    // The passwordFromClient could be used for an initial check if needed, but for now, it's ignored for the external API auth.
+    // The passwordFromClient is passed from the client AuthForm.
+    // For this specific API call, we are instructed to use the hardcoded API_PASSWORD.
 
     console.log(`[API Route] Attempting login to external API: ${LOGIN_ENDPOINT} with email: ${APP_EMAIL}`);
 
@@ -48,16 +38,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (responseData.status === 'success' && responseData.token) {
+    // Assuming the external API response structure for success is { "status": "success", "token": "...", "expires_in": ... }
+    // Or simply { "token": "...", ... } if status field is not always present on success
+    if (responseData.token) {
       const tokenData: AuthToken = {
         token: responseData.token,
-        // If the external API provides an expiry, use it, otherwise default
+        // If the external API provides an expiry (e.g., expires_in in seconds), use it, otherwise default to 1 hour
         expiresAt: responseData.expires_in ? Date.now() + responseData.expires_in * 1000 : Date.now() + 3600 * 1000,
       };
       console.log('[API Route] External API login successful.');
       return NextResponse.json(tokenData, { status: 200 });
     } else {
-      console.error('[API Route] External API login response malformed:', responseData);
+      console.error('[API Route] External API login response malformed (token missing):', responseData);
       return NextResponse.json({ message: 'Authentication failed: Malformed response from authentication server.' }, { status: 500 });
     }
   } catch (error) {

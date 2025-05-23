@@ -3,17 +3,15 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import type { ApiCase } from '@/types/medibill';
 
-const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
+// Hardcoded value for testing
+const EXTERNAL_API_BASE_URL = "https://api.medibill.co.za/api/v1";
 
 interface CaseUpdateParams {
   params: { caseId: string };
 }
 
 export async function PUT(request: NextRequest, { params }: CaseUpdateParams) {
-  if (!EXTERNAL_API_BASE_URL || !EXTERNAL_API_BASE_URL.startsWith('http')) {
-    console.error('[API Case Update Route Error] NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL:', EXTERNAL_API_BASE_URL);
-    return NextResponse.json({ message: 'Server configuration error: API base URL not set for case update proxy.' }, { status: 500 });
-  }
+  // Environment variable check is removed as value is hardcoded above
   
   const { caseId } = params;
   if (!caseId) {
@@ -33,7 +31,7 @@ export async function PUT(request: NextRequest, { params }: CaseUpdateParams) {
   }
 
   // The external API endpoint for general update is /cases/submissions/update/{caseId}
-  const UPDATE_CASE_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}cases/submissions/update/${caseId}`;
+  const UPDATE_CASE_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases/submissions/update/${caseId}`;
 
   try {
     console.log(`[API Case Update Route] Proxied PUT request for case ${caseId} to: ${UPDATE_CASE_ENDPOINT_EXTERNAL}`);
