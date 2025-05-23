@@ -11,33 +11,38 @@ const INTERNAL_CASE_STATUS_UPDATE_ENDPOINT_TEMPLATE = '/api/cases/[caseId]/statu
 const INTERNAL_CASE_GENERAL_UPDATE_ENDPOINT_TEMPLATE = '/api/cases/[caseId]/update';
 
 
-// Hardcoded credentials for the API call made by the server-side proxy
-const APP_EMAIL_FOR_PROXY = process.env.NEXT_PUBLIC_MEDIBILL_APP_EMAIL; // Used by /api/auth/login route
-const API_PASSWORD_FOR_PROXY = process.env.NEXT_PUBLIC_MEDIBILL_API_PASSWORD; // Used by /api/auth/login route
-
 const processApiCase = (apiCase: ApiCase): Case => {
-  let status: CaseStatus = 'NEW';
+  let status: CaseStatus = 'NEW'; // Default to NEW
   if (apiCase.case_status === 'PROCESSED') {
     status = 'PROCESSED';
-  } else if (apiCase.case_status === 'NEW' || apiCase.case_status === '' || !apiCase.case_status) {
+  } else if (apiCase.case_status === 'NEW') {
     status = 'NEW';
   }
+  // If case_status is empty, null, undefined, or any other value, it defaults to 'NEW' as per initialization
 
-  const validServiceDate = apiCase.service_date && apiCase.service_date.match(/^\d{4}-\d{2}-\d{2}$/) ? apiCase.service_date : '1970-01-01';
+  const validServiceDate = apiCase.service_date && apiCase.service_date.match(/^\d{4}-\d{2}-\d{2}$/) 
+    ? apiCase.service_date 
+    : '1970-01-01'; // Fallback for invalid or missing date
   
-  let validStartTimeString = '00:00:00';
-  if (apiCase.start_time && apiCase.start_time.match(/^\d{2}:\d{2}(:\d{2})?$/)) {
-    validStartTimeString = apiCase.start_time.length === 5 ? `${apiCase.start_time}:00` : apiCase.start_time;
+  let validStartTimeString = '00:00:00'; // Default to midnight if start_time is invalid or missing
+  if (apiCase.start_time && typeof apiCase.start_time === 'string') {
+    if (apiCase.start_time.match(/^\d{2}:\d{2}:\d{2}$/)) { // HH:MM:SS
+      validStartTimeString = apiCase.start_time;
+    } else if (apiCase.start_time.match(/^\d{2}:\d{2}$/)) { // HH:MM
+      validStartTimeString = `${apiCase.start_time}:00`;
+    }
+    // If format is still not matched, it remains '00:00:00'
   }
   
+  // Ensure a valid ISO string for submittedDateTime, crucial for date operations
   const submittedDateTime = `${validServiceDate}T${validStartTimeString}Z`;
 
   return {
     ...apiCase,
-    id: Number(apiCase.id),
+    id: Number(apiCase.id), // Ensure ID is a number
     status,
     submittedDateTime,
-    original_case_status: apiCase.case_status || '',
+    original_case_status: apiCase.case_status || '', // Store original status if needed
   };
 };
 
@@ -49,7 +54,9 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ password: passwordFromForm }),
+      // The passwordFromForm is sent to the internal proxy.
+      // The proxy then uses the hardcoded API_PASSWORD for the external call.
+      body: JSON.stringify({ password: passwordFromForm }), 
     });
 
     const responseData = await response.json();
@@ -64,11 +71,13 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
       throw new Error(errMsg);
     }
 
+    // Based on provided API response: { "status": "success", "token": "..." }
     if (responseData.status === 'success' && responseData.token) {
       console.log('[MediBill API Client] Login via internal proxy successful.');
       return {
         token: responseData.token,
-        expiresAt: responseData.expires_in ? Date.now() + responseData.expires_in * 1000 : Date.now() + 3600 * 1000, // Default 1 hour expiry if not provided
+        // If the external API provides an expiry, use it, otherwise default (set by proxy if needed)
+        expiresAt: responseData.expires_in ? Date.now() + responseData.expires_in * 1000 : Date.now() + 3600 * 1000, 
       };
     } else {
       const message = `Login successful (HTTP ${response.status}), but token data from internal proxy is missing or in an unexpected format. Response: ${JSON.stringify(responseData).substring(0,500)}...`;
@@ -79,7 +88,7 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
   } catch (error) {
     let detailedErrorMessage = `Client-side error during login via internal proxy ${INTERNAL_LOGIN_ENDPOINT}.`;
     if (error instanceof TypeError && error.message.toLowerCase().includes("failed to fetch")) {
-      detailedErrorMessage = `Client-side API Login Error: "Failed to fetch from internal endpoint ${INTERNAL_LOGIN_ENDPOINT}. This usually means the Next.js server itself is not reachable, the API route is misconfigured, or there's a network issue." Original error: ${error.toString()}`;
+        detailedErrorMessage = `Client-side API Login Error: "Failed to fetch from internal endpoint ${INTERNAL_LOGIN_ENDPOINT}. This usually means the Next.js server itself is not reachable, the API route is misconfigured, or there's a network issue." Original error: ${error.toString()}`;
     } else if (error instanceof Error) {
       detailedErrorMessage = error.message;
     }
@@ -89,7 +98,6 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
 };
 
 export const getDoctors = async (token: string): Promise<Doctor[]> => {
-  console.log(`[MediBill API Client] Fetching doctors via internal proxy: ${INTERNAL_DOCTORS_ENDPOINT} with token: ${token ? token.substring(0, 10) + '...' : 'null'}`);
   const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
   if (!EXTERNAL_API_BASE_URL || typeof EXTERNAL_API_BASE_URL !== 'string' || !EXTERNAL_API_BASE_URL.startsWith('http')) {
     const errorMsg = `CRITICAL CLIENT-SIDE CONFIGURATION ERROR for getDoctors: NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL. Current value: '${EXTERNAL_API_BASE_URL}'. Cannot proceed.`;
@@ -97,6 +105,7 @@ export const getDoctors = async (token: string): Promise<Doctor[]> => {
     throw new Error(errorMsg);
   }
 
+  console.log(`[MediBill API Client] Fetching doctors via internal proxy: ${INTERNAL_DOCTORS_ENDPOINT} with token: ${token ? token.substring(0, 10) + '...' : 'null'}`);
   try {
     const response = await fetch(INTERNAL_DOCTORS_ENDPOINT, {
       method: 'GET',
@@ -105,29 +114,36 @@ export const getDoctors = async (token: string): Promise<Doctor[]> => {
       },
     });
 
+    const responseDataText = await response.text(); // Read as text first for robust logging
+
     if (!response.ok) {
-      const errorText = await response.text();
       let errorMessage = `Failed to fetch doctors via proxy ${INTERNAL_DOCTORS_ENDPOINT}: ${response.status}`;
       try {
-        const errorData = JSON.parse(errorText);
-        errorMessage += ` - Server: ${errorData.message || errorData.detail || errorText}`;
-      } catch (e) { errorMessage += ` - Body: ${errorText.substring(0,200)}...`; }
+        const errorData = JSON.parse(responseDataText);
+        errorMessage += ` - Server: ${errorData.message || errorData.detail || responseDataText}`;
+      } catch (e) { errorMessage += ` - Body: ${responseDataText.substring(0,200)}...`; }
       console.error(errorMessage);
       throw new Error(errorMessage);
     }
 
-    const responseData = await response.json();
-    console.log(`[MediBill API Client] Raw response from ${INTERNAL_DOCTORS_ENDPOINT}:`, JSON.stringify(responseData, null, 2).substring(0, 500) + '...');
-
+    let responseData;
+    try {
+        responseData = JSON.parse(responseDataText);
+    } catch (jsonError) {
+        console.error(`[MediBill API Client] Failed to parse JSON response from ${INTERNAL_DOCTORS_ENDPOINT}. Status: ${response.status}. Response Text: ${responseDataText.substring(0, 500)}...`);
+        throw new Error(`Malformed JSON response from internal doctors proxy.`);
+    }
+    
+    console.log(`[MediBill API Client] Raw response from ${INTERNAL_DOCTORS_ENDPOINT}:`, JSON.stringify(responseData).substring(0, 500) + '...');
 
     if (Array.isArray(responseData)) {
       const doctors: Doctor[] = responseData;
-      const filteredDoctors = doctors.filter(doc => doc.practiceName && !doc.practiceName.toUpperCase().includes('TEST'));
-      console.log(`[MediBill API Client] Doctors received: ${doctors.length}, Doctors after 'TEST' filter: ${filteredDoctors.length}`);
-      return filteredDoctors;
+      // The filtering for 'TEST' practiceName is done on the server-side proxy now.
+      console.log(`[MediBill API Client] Doctors received from proxy: ${doctors.length}`);
+      return doctors;
     } else {
       console.warn(`[MediBill API Client] getDoctors (via proxy) received non-array data from ${INTERNAL_DOCTORS_ENDPOINT}:`, responseData);
-      return [];
+      return []; // Return empty array if not an array to prevent .filter errors downstream
     }
 
   } catch (error) {
@@ -138,7 +154,6 @@ export const getDoctors = async (token: string): Promise<Doctor[]> => {
 };
 
 export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[]): Promise<Case[]> => {
-  console.log(`[MediBill API Client] Fetching cases via internal proxy: ${INTERNAL_CASES_ENDPOINT} for doctors: ${JSON.stringify(doctorAccNos)} with token: ${token ? token.substring(0, 10) + '...' : 'null'}`);
   const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
   if (!EXTERNAL_API_BASE_URL || typeof EXTERNAL_API_BASE_URL !== 'string' || !EXTERNAL_API_BASE_URL.startsWith('http')) {
      const errorMsg = `CRITICAL CLIENT-SIDE CONFIGURATION ERROR for getAllCasesForDoctors: NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL. Current value: '${EXTERNAL_API_BASE_URL}'. Cannot proceed.`;
@@ -146,6 +161,7 @@ export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[
     throw new Error(errorMsg);
   }
 
+  console.log(`[MediBill API Client] Fetching cases via internal proxy: ${INTERNAL_CASES_ENDPOINT} for doctors: ${JSON.stringify(doctorAccNos)} with token: ${token ? token.substring(0, 10) + '...' : 'null'}`);
   try {
     const response = await fetch(INTERNAL_CASES_ENDPOINT, {
       method: 'POST',
@@ -153,31 +169,39 @@ export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ doctorAccNos }), // doctorAccNos here should be the practice_no or equivalent ID
+      body: JSON.stringify({ doctorAccNos }), 
     });
 
+    const responseDataText = await response.text(); // Read as text first
+
     if (!response.ok) {
-      const errorText = await response.text();
       let errorMessage = `Failed to fetch cases via proxy ${INTERNAL_CASES_ENDPOINT}: ${response.status}`;
       try {
-        const errorData = JSON.parse(errorText);
-        errorMessage += ` - Server: ${errorData.message || errorData.detail || errorText}`;
-      } catch (e) { errorMessage += ` - Body: ${errorText.substring(0,200)}...`; }
+        const errorData = JSON.parse(responseDataText);
+        errorMessage += ` - Server: ${errorData.message || errorData.detail || responseDataText}`;
+      } catch (e) { errorMessage += ` - Body: ${responseDataText.substring(0,200)}...`; }
       console.error(errorMessage);
       throw new Error(errorMessage);
     }
 
-    const responseData = await response.json();
-    console.log(`[MediBill API Client] Raw response from ${INTERNAL_CASES_ENDPOINT}:`, JSON.stringify(responseData, null, 2).substring(0, 500) + '...');
+    let responseData;
+    try {
+        responseData = JSON.parse(responseDataText);
+    } catch (jsonError) {
+        console.error(`[MediBill API Client] Failed to parse JSON response from ${INTERNAL_CASES_ENDPOINT}. Status: ${response.status}. Response Text: ${responseDataText.substring(0, 500)}...`);
+        throw new Error(`Malformed JSON response from internal cases proxy.`);
+    }
+
+    console.log(`[MediBill API Client] Raw response from ${INTERNAL_CASES_ENDPOINT}:`, JSON.stringify(responseData).substring(0, 500) + '...');
     
     if (Array.isArray(responseData)) {
         const apiCases: ApiCase[] = responseData;
         const processedCases = apiCases.map(processApiCase);
-        console.log(`[MediBill API Client] Cases received: ${apiCases.length}, Processed cases: ${processedCases.length}`);
+        console.log(`[MediBill API Client] Cases received from proxy: ${apiCases.length}, Processed cases: ${processedCases.length}`);
         return processedCases;
     } else {
         console.warn(`[MediBill API Client] getAllCasesForDoctors (via proxy) received non-array data from ${INTERNAL_CASES_ENDPOINT}:`, responseData);
-        return [];
+        return []; // Return empty to prevent downstream errors
     }
 
   } catch (error) {
@@ -206,17 +230,26 @@ export const updateCaseStatus = async (token: string, caseId: number, newStatus:
       },
       body: JSON.stringify({ case_status: newStatus }),
     });
+
+    const responseDataText = await response.text(); // Read as text first
+
     if (!response.ok) {
-       const errorText = await response.text();
        let errorMessage = `Failed to update case status via proxy for case ID ${caseId} to ${newStatus} at ${url}: ${response.status}`;
        try {
-         const errorData = JSON.parse(errorText);
-         errorMessage += ` - Server: ${errorData.message || errorData.detail || errorText}`;
-       } catch (e) { errorMessage += ` - Body: ${errorText.substring(0,200)}...`; }
+         const errorData = JSON.parse(responseDataText);
+         errorMessage += ` - Server: ${errorData.message || errorData.detail || responseDataText}`;
+       } catch (e) { errorMessage += ` - Body: ${responseDataText.substring(0,200)}...`; }
        console.error(errorMessage);
        throw new Error(errorMessage);
     }
-    const updatedApiCase: ApiCase = await response.json();
+
+    let updatedApiCase: ApiCase;
+    try {
+        updatedApiCase = JSON.parse(responseDataText);
+    } catch (jsonError) {
+        console.error(`[MediBill API Client] Failed to parse JSON response from ${url} after status update. Status: ${response.status}. Response Text: ${responseDataText.substring(0, 500)}...`);
+        throw new Error(`Malformed JSON response from internal case status update proxy.`);
+    }
     return { success: true, updatedCase: processApiCase(updatedApiCase) };
   } catch (error) {
     console.error(`API updateCaseStatus (via proxy) Error for ${url}:`, error);
@@ -244,20 +277,30 @@ export const updateCase = async (token: string, caseId: number, updatedCaseData:
       },
       body: JSON.stringify(updatedCaseData),
     });
+
+    const responseDataText = await response.text(); // Read as text first
+
     if (!response.ok) {
-      const errorText = await response.text();
       let errorMessage = `Failed to update case ${caseId} via proxy at ${url}: ${response.status}`;
       try {
-        const errorData = JSON.parse(errorText);
-        errorMessage += ` - Server: ${errorData.message || errorData.detail || errorText}`;
+        const errorData = JSON.parse(responseDataText);
+        errorMessage += ` - Server: ${errorData.message || errorData.detail || responseDataText}`;
       } catch (e) { errorMessage += ` - Body: ${errorText.substring(0,200)}...`; }
       console.error(errorMessage);
       throw new Error(errorMessage);
     }
-    const updatedApiCase: ApiCase = await response.json();
+
+    let updatedApiCase: ApiCase;
+     try {
+        updatedApiCase = JSON.parse(responseDataText);
+    } catch (jsonError) {
+        console.error(`[MediBill API Client] Failed to parse JSON response from ${url} after general case update. Status: ${response.status}. Response Text: ${responseDataText.substring(0, 500)}...`);
+        throw new Error(`Malformed JSON response from internal general case update proxy.`);
+    }
     return processApiCase(updatedApiCase);
   } catch (error) {
     console.error(`API updateCase (via proxy) Error for ${url}:`, error);
     throw error instanceof Error ? error : new Error(`An unknown error occurred while updating case ${caseId} via proxy.`);
   }
 };
+
