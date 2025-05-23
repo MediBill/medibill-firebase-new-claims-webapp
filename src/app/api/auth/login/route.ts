@@ -21,11 +21,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Server configuration error: API password not set.' }, { status: 500 });
   }
 
-  const LOGIN_ENDPOINT = `${EXTERNAL_API_BASE_URL}/auth/login`;
+  // Ensure trailing slash for the specific endpoint if API is strict
+  const LOGIN_ENDPOINT = `${EXTERNAL_API_BASE_URL.replace(/\/$/, '')}/auth/login/`;
+  console.log(`[API Route] Attempting login to external API: ${LOGIN_ENDPOINT} with email: ${APP_EMAIL}`);
 
   try {
-    console.log(`[API Route] Attempting login to external API: ${LOGIN_ENDPOINT} with email: ${APP_EMAIL}`);
-
     const externalApiResponse = await fetch(LOGIN_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -35,7 +35,11 @@ export async function POST(request: NextRequest) {
     });
 
     const responseText = await externalApiResponse.text();
-    console.log(`[API Route] External API login response text (first 500 chars): ${responseText.substring(0, 500)}`);
+    // Log the raw response text for debugging, especially for non-OK responses
+    if (!externalApiResponse.ok) {
+        console.warn(`[API Route] External API login response text (Status: ${externalApiResponse.status}): ${responseText.substring(0, 500)}`);
+    }
+
 
     let responseData;
     try {
@@ -51,9 +55,11 @@ export async function POST(request: NextRequest) {
 
     if (!externalApiResponse.ok) {
       console.error(`[API Route] External API login failed with status ${externalApiResponse.status}:`, responseData);
+      // Attempt to use error message from external API if available, otherwise use status
+      const message = responseData?.message || responseData?.detail || `External API error: ${externalApiResponse.status}`;
       return NextResponse.json(
-        { message: responseData.message || responseData.detail || `External API error: ${externalApiResponse.status}` },
-        { status: externalApiResponse.status }
+        { message },
+        { status: externalApiResponse.status } 
       );
     }
 
@@ -73,7 +79,7 @@ export async function POST(request: NextRequest) {
     console.error('[API Route] Internal error during login proxy:', error);
     let message = 'Internal server error during login.';
     if (error instanceof Error) {
-        message = error.message.includes('fetch') ? 'Network error or external API unreachable.' : error.message;
+        message = error.message.includes('fetch') ? `Network error or external API unreachable at ${LOGIN_ENDPOINT}.` : error.message;
     }
     return NextResponse.json({ message }, { status: 500 });
   }
