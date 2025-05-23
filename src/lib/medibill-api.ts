@@ -1,34 +1,36 @@
 
 import type { AuthToken, Doctor, Case, CaseStatus, ApiCase } from '@/types/medibill';
 
-// Internal Next.js API route for login (this is now the primary way to login)
+// Internal Next.js API route for login
 const INTERNAL_LOGIN_ENDPOINT = '/api/auth/login';
 
-// Environment variables - will be checked within functions that use them directly.
-// const APP_EMAIL = process.env.NEXT_PUBLIC_MEDIBILL_APP_EMAIL; // Used in the /api/auth/login route
-// const API_PASSWORD = process.env.NEXT_PUBLIC_MEDIBILL_API_PASSWORD; // Used in the /api/auth/login route
+// Internal Next.js API routes for other operations
+const INTERNAL_DOCTORS_ENDPOINT = '/api/doctors';
+const INTERNAL_CASES_ENDPOINT = '/api/cases'; // Will be a POST to send doctorAccNos
+const INTERNAL_CASE_STATUS_UPDATE_ENDPOINT_TEMPLATE = '/api/cases/[caseId]/status';
+const INTERNAL_CASE_GENERAL_UPDATE_ENDPOINT_TEMPLATE = '/api/cases/[caseId]/update';
 
 
 const processApiCase = (apiCase: ApiCase): Case => {
   let status: CaseStatus = 'NEW';
   if (apiCase.case_status === 'PROCESSED') {
     status = 'PROCESSED';
-  } else if (apiCase.case_status === 'NEW' || !apiCase.case_status) {
+  } else if (apiCase.case_status === 'NEW' || !apiCase.case_status) { // API might send "" for new
     status = 'NEW';
   }
 
-  // Ensure service_date is valid and start_time is in HH:MM format
   const validServiceDate = apiCase.service_date && apiCase.service_date.match(/^\d{4}-\d{2}-\d{2}$/) ? apiCase.service_date : '1970-01-01';
-  const validStartTimeString = apiCase.start_time && apiCase.start_time.match(/^\d{2}:\d{2}$/)
+  const validStartTimeString = apiCase.start_time && apiCase.start_time.match(/^\d{2}:\d{2}(:\d{2})?$/)
     ? apiCase.start_time
-    : '00:00';
-  const fullStartTime = validStartTimeString.length === 5 ? `${validStartTimeString}:00` : validStartTimeString; // Ensure seconds part
+    : '00:00:00';
+  
+  const fullStartTime = validStartTimeString.length === 5 ? `${validStartTimeString}:00` : validStartTimeString;
 
-  const submittedDateTime = `${validServiceDate}T${fullStartTime}Z`;
-
+  const submittedDateTime = `${validServiceDate}T${fullStartTime}Z`; // Ensure 'Z' for UTC interpretation if no timezone info
 
   return {
     ...apiCase,
+    id: Number(apiCase.id), // Ensure id is a number
     status,
     submittedDateTime,
     original_case_status: apiCase.case_status || '',
@@ -43,7 +45,9 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ password: passwordFromForm }), // Server-side route uses configured credentials
+      // The password from the form is sent to our internal API route.
+      // The internal API route then uses the configured credentials for the external API.
+      body: JSON.stringify({ password: passwordFromForm }),
     });
 
     const responseData = await response.json();
@@ -58,6 +62,7 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
       throw new Error(errMsg);
     }
 
+    // Expecting { token: "...", expiresAt: "..." } from our internal API route
     if (responseData.token && responseData.expiresAt) {
        console.log('[MediBill API Client] Login via internal proxy successful.');
       return responseData as AuthToken;
@@ -79,32 +84,18 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
   }
 };
 
-
-// --- NOTE: The following functions (getDoctors, getAllCasesForDoctors, updateCaseStatus) ---
-// --- still make DIRECT calls to the EXTERNAL API. They will be subject to CORS if the ---
-// --- external API server (api.medibill.co.za) is not configured to allow requests ---
-// --- from this application's origin for these specific endpoints and methods. ---
-// --- If CORS issues persist for these, they would also need to be proxied. ---
-
 export const getDoctors = async (token: string): Promise<Doctor[]> => {
-  const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
-  if (!EXTERNAL_API_BASE_URL || typeof EXTERNAL_API_BASE_URL !== 'string' || !EXTERNAL_API_BASE_URL.startsWith('http')) {
-    const errorMsg = `Configuration error for getDoctors: NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL. Current value: '${EXTERNAL_API_BASE_URL}'.`;
-    console.error(errorMsg);
-    throw new Error(errorMsg);
-  }
-  const DOCTORS_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/doctors`;
-  console.log(`[MediBill API Client] Fetching doctors directly from: ${DOCTORS_ENDPOINT_EXTERNAL}`);
-
+  console.log(`[MediBill API Client] Fetching doctors via internal proxy: ${INTERNAL_DOCTORS_ENDPOINT}`);
   try {
-    const response = await fetch(DOCTORS_ENDPOINT_EXTERNAL, {
+    const response = await fetch(INTERNAL_DOCTORS_ENDPOINT, {
+      method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
       },
     });
     if (!response.ok) {
       const errorText = await response.text();
-      let errorMessage = `Failed to fetch doctors from ${DOCTORS_ENDPOINT_EXTERNAL}: ${response.status}`;
+      let errorMessage = `Failed to fetch doctors via proxy ${INTERNAL_DOCTORS_ENDPOINT}: ${response.status}`;
       try {
         const errorData = JSON.parse(errorText);
         errorMessage += ` - Server: ${errorData.message || errorData.detail || errorText}`;
@@ -112,63 +103,49 @@ export const getDoctors = async (token: string): Promise<Doctor[]> => {
       throw new Error(errorMessage);
     }
     const data: Doctor[] = await response.json();
+    // Filtering logic remains, as it's business logic not specific to API call
     return data.filter(doc => doc.practiceName && !doc.practiceName.toUpperCase().includes('TEST'));
   } catch (error) {
-    console.error(`API getDoctors Error from ${DOCTORS_ENDPOINT_EXTERNAL}:`, error);
+    console.error(`API getDoctors (via proxy) Error from ${INTERNAL_DOCTORS_ENDPOINT}:`, error);
     if (error instanceof Error) throw error;
-    throw new Error('An unknown error occurred while fetching doctors.');
+    throw new Error('An unknown error occurred while fetching doctors via proxy.');
   }
 };
 
 export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[]): Promise<Case[]> => {
-  const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
-  if (!EXTERNAL_API_BASE_URL || typeof EXTERNAL_API_BASE_URL !== 'string' || !EXTERNAL_API_BASE_URL.startsWith('http')) {
-    const errorMsg = `Configuration error for getAllCasesForDoctors: NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL. Current value: '${EXTERNAL_API_BASE_URL}'.`;
-    console.error(errorMsg);
-    throw new Error(errorMsg);
-  }
-  const CASES_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases`;
-  console.log(`[MediBill API Client] Fetching cases directly from: ${CASES_ENDPOINT_EXTERNAL}`);
-
+  console.log(`[MediBill API Client] Fetching cases via internal proxy: ${INTERNAL_CASES_ENDPOINT}`);
   try {
-    const response = await fetch(CASES_ENDPOINT_EXTERNAL, {
+    const response = await fetch(INTERNAL_CASES_ENDPOINT, {
+      method: 'POST', // Using POST to send doctorAccNos in the body
       headers: {
         'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ doctorAccNos }),
     });
     if (!response.ok) {
       const errorText = await response.text();
-      let errorMessage = `Failed to fetch cases from ${CASES_ENDPOINT_EXTERNAL}: ${response.status}`;
+      let errorMessage = `Failed to fetch cases via proxy ${INTERNAL_CASES_ENDPOINT}: ${response.status}`;
       try {
         const errorData = JSON.parse(errorText);
         errorMessage += ` - Server: ${errorData.message || errorData.detail || errorText}`;
       } catch (e) { errorMessage += ` - Body: ${errorText.substring(0,200)}...`; }
       throw new Error(errorMessage);
     }
+    // The server-side proxy now handles filtering if doctorAccNos are provided.
+    // The response will be ApiCase[] which needs processing.
     const apiCases: ApiCase[] = await response.json();
-    const relevantApiCases = apiCases.filter(apiCase =>
-        apiCase.doctor_acc_no &&
-        doctorAccNos.length > 0 &&
-        doctorAccNos.includes(apiCase.doctor_acc_no)
-    );
-    return relevantApiCases.map(processApiCase);
+    return apiCases.map(processApiCase);
   } catch (error) {
-    console.error(`API getAllCasesForDoctors Error from ${CASES_ENDPOINT_EXTERNAL}:`, error);
+    console.error(`API getAllCasesForDoctors (via proxy) Error from ${INTERNAL_CASES_ENDPOINT}:`, error);
     if (error instanceof Error) throw error;
-    throw new Error('An unknown error occurred while fetching cases.');
+    throw new Error('An unknown error occurred while fetching cases via proxy.');
   }
 };
 
 export const updateCaseStatus = async (token: string, caseId: number, newStatus: CaseStatus): Promise<{ success: boolean; updatedCase?: Case }> => {
-  const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
-  if (!EXTERNAL_API_BASE_URL || typeof EXTERNAL_API_BASE_URL !== 'string' || !EXTERNAL_API_BASE_URL.startsWith('http')) {
-    const errorMsg = `Configuration error for updateCaseStatus: NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL. Current value: '${EXTERNAL_API_BASE_URL}'.`;
-    console.error(errorMsg);
-    throw new Error(errorMsg);
-  }
-  const UPDATE_CASE_STATUS_ENDPOINT_TEMPLATE_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases/{caseId}/status`;
-  const url = UPDATE_CASE_STATUS_ENDPOINT_TEMPLATE_EXTERNAL.replace('{caseId}', caseId.toString());
-  console.log(`[MediBill API Client] Updating case status directly for ID ${caseId} to ${newStatus} at: ${url}`);
+  const url = INTERNAL_CASE_STATUS_UPDATE_ENDPOINT_TEMPLATE.replace('[caseId]', caseId.toString());
+  console.log(`[MediBill API Client] Updating case status via internal proxy for ID ${caseId} to ${newStatus} at: ${url}`);
 
   try {
     const response = await fetch(url, {
@@ -181,7 +158,7 @@ export const updateCaseStatus = async (token: string, caseId: number, newStatus:
     });
     if (!response.ok) {
        const errorText = await response.text();
-       let errorMessage = `Failed to update case status for case ID ${caseId} to ${newStatus} at ${url}: ${response.status}`;
+       let errorMessage = `Failed to update case status via proxy for case ID ${caseId} to ${newStatus} at ${url}: ${response.status}`;
        try {
          const errorData = JSON.parse(errorText);
          errorMessage += ` - Server: ${errorData.message || errorData.detail || errorText}`;
@@ -191,23 +168,15 @@ export const updateCaseStatus = async (token: string, caseId: number, newStatus:
     const updatedApiCase: ApiCase = await response.json();
     return { success: true, updatedCase: processApiCase(updatedApiCase) };
   } catch (error) {
-    console.error(`API updateCaseStatus Error for ${url}:`, error);
-    const message = error instanceof Error ? error.message : `An unknown error occurred while updating case status for case ID ${caseId}.`;
+    console.error(`API updateCaseStatus (via proxy) Error for ${url}:`, error);
+    const message = error instanceof Error ? error.message : `An unknown error occurred while updating case status via proxy for case ID ${caseId}.`;
     throw new Error(message);
   }
 };
 
-
 export const updateCase = async (token: string, caseId: number, updatedCaseData: Partial<ApiCase>): Promise<Case> => {
-  const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
-  if (!EXTERNAL_API_BASE_URL || typeof EXTERNAL_API_BASE_URL !== 'string' || !EXTERNAL_API_BASE_URL.startsWith('http')) {
-    const errorMsg = `Configuration error for updateCase: NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL. Current value: '${EXTERNAL_API_BASE_URL}'.`;
-    console.error(errorMsg);
-    throw new Error(errorMsg);
-  }
-  // Assuming an endpoint like this for general updates. This would also be a direct external call.
-  const url = `${EXTERNAL_API_BASE_URL}/cases/submissions/update/${caseId}`;
-  console.log(`[MediBill API Client] Updating case ID ${caseId} directly at: ${url}`);
+  const url = INTERNAL_CASE_GENERAL_UPDATE_ENDPOINT_TEMPLATE.replace('[caseId]', caseId.toString());
+  console.log(`[MediBill API Client] Updating case ID ${caseId} via internal proxy at: ${url}`);
 
   try {
     const response = await fetch(url, {
@@ -216,11 +185,11 @@ export const updateCase = async (token: string, caseId: number, updatedCaseData:
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(updatedCaseData),
+      body: JSON.stringify(updatedCaseData), // Send the whole partial ApiCase object
     });
     if (!response.ok) {
       const errorText = await response.text();
-      let errorMessage = `Failed to update case ${caseId} at ${url}: ${response.status}`;
+      let errorMessage = `Failed to update case ${caseId} via proxy at ${url}: ${response.status}`;
       try {
         const errorData = JSON.parse(errorText);
         errorMessage += ` - Server: ${errorData.message || errorData.detail || errorText}`;
@@ -230,7 +199,7 @@ export const updateCase = async (token: string, caseId: number, updatedCaseData:
     const updatedApiCase: ApiCase = await response.json();
     return processApiCase(updatedApiCase);
   } catch (error) {
-    console.error(`API updateCase Error for ${url}:`, error);
-    throw error instanceof Error ? error : new Error(`An unknown error occurred while updating case ${caseId}.`);
+    console.error(`API updateCase (via proxy) Error for ${url}:`, error);
+    throw error instanceof Error ? error : new Error(`An unknown error occurred while updating case ${caseId} via proxy.`);
   }
 };
