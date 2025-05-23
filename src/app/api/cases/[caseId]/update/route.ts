@@ -28,18 +28,18 @@ export async function PUT(request: NextRequest, { params }: CaseUpdateParams) {
     return NextResponse.json({ message: 'Invalid request body. Expected JSON with case data.' }, { status: 400 });
   }
 
-  // Corrected endpoint
+  // Corrected endpoint as per user clarification
   const UPDATE_CASE_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases/submissions/update/${caseId}`;
 
   try {
     console.log(`[API Case Update Route] Proxied PUT request for case ${caseId} to: ${UPDATE_CASE_ENDPOINT_EXTERNAL}`);
     const externalApiResponse = await fetch(UPDATE_CASE_ENDPOINT_EXTERNAL, {
-      method: 'PUT',
+      method: 'PUT', // Ensures PUT method is used
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(updatedCaseData),
+      body: JSON.stringify(updatedCaseData), // Forwards the body received from the client
     });
 
     const responseData = await externalApiResponse.json();
@@ -51,6 +51,7 @@ export async function PUT(request: NextRequest, { params }: CaseUpdateParams) {
         { status: externalApiResponse.status }
       );
     }
+    console.log(`[API Case Update Route] Successfully updated case ${caseId} via external API. Response:`, responseData);
     return NextResponse.json(responseData, { status: 200 });
   } catch (error) {
     console.error(`[API Case Update Route] Internal error during case update proxy for case ${caseId}:`, error);
