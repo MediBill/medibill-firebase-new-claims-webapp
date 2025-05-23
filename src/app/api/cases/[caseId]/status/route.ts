@@ -1,7 +1,7 @@
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import type { CaseStatus } from '@/types/medibill';
+import type { CaseStatus, ApiCase } from '@/types/medibill';
 
 // Hardcoded value for testing
 const EXTERNAL_API_BASE_URL = "https://api.medibill.co.za/api/v1";
@@ -11,8 +11,6 @@ interface StatusUpdateParams {
 }
 
 export async function PUT(request: NextRequest, { params }: StatusUpdateParams) {
-  // Environment variable check is removed as value is hardcoded above
-  
   const { caseId } = params;
   if (!caseId) {
     return NextResponse.json({ message: 'Case ID is missing from the path.' }, { status: 400 });
@@ -47,16 +45,38 @@ export async function PUT(request: NextRequest, { params }: StatusUpdateParams) 
       body: JSON.stringify({ case_status: newStatus }),
     });
 
-    const responseData = await externalApiResponse.json();
+    const responseDataText = await externalApiResponse.text();
+    console.log(`[API Case Status Route] External API response text for case ${caseId} update: Status ${externalApiResponse.status}, Body: ${responseDataText.substring(0, 500)}...`);
 
     if (!externalApiResponse.ok) {
-      console.error(`[API Case Status Route] External API error from ${UPDATE_STATUS_ENDPOINT_EXTERNAL} with status ${externalApiResponse.status}:`, responseData);
-      return NextResponse.json(
-        { message: responseData.message || responseData.detail || `External API error updating case status: ${externalApiResponse.status}` },
-        { status: externalApiResponse.status }
-      );
+      let message = `External API error updating case status: ${externalApiResponse.status}`;
+      try {
+        // Try to parse error response if it's JSON
+        const errorJson = JSON.parse(responseDataText);
+        message = errorJson.message || errorJson.detail || message;
+      } catch (e) {
+        // If parsing fails, use the raw text if it's short, or a generic message
+        message += ` - Response: ${responseDataText.substring(0, 200)}...`;
+      }
+      console.error(`[API Case Status Route] External API error from ${UPDATE_STATUS_ENDPOINT_EXTERNAL} with status ${externalApiResponse.status}:`, message);
+      return NextResponse.json({ message }, { status: externalApiResponse.status });
     }
-    return NextResponse.json(responseData, { status: 200 });
+
+    // If response is OK, try to parse the text as JSON (expecting the updated case)
+    try {
+      const updatedCase: ApiCase = JSON.parse(responseDataText);
+      // The external API for status update might return the full updated case object.
+      // If it only returns a success message or empty body, this parsing will fail.
+      // For now, we assume it returns the updated case object.
+      return NextResponse.json(updatedCase, { status: 200 });
+    } catch (jsonError) {
+      console.error(`[API Case Status Route] Failed to parse JSON response from external API after successful status update for case ${caseId}. Text: ${responseDataText}`, jsonError);
+      // If the external API returns 200 OK but not valid JSON (e.g., empty or plain text "Success")
+      // This indicates a mismatch in expectation. For now, return an error.
+      // Potentially, if an empty 200/204 is valid, the client might need to re-fetch or just assume success.
+      return NextResponse.json({ message: 'Status updated successfully, but failed to parse confirmation from external API.' }, { status: 502 }); // 502 Bad Gateway, as proxy got unexpected response
+    }
+
   } catch (error) {
     console.error(`[API Case Status Route] Internal error during case status update proxy for case ${caseId}:`, error);
     let message = 'Internal server error during case status update proxy.';
