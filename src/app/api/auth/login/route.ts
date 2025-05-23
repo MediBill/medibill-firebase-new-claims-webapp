@@ -21,8 +21,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Server configuration error: API password not set.' }, { status: 500 });
   }
 
-  // Ensure trailing slash for the specific endpoint if API is strict
-  const LOGIN_ENDPOINT = `${EXTERNAL_API_BASE_URL.replace(/\/$/, '')}/auth/login/`;
+  // Construct login endpoint without trailing slash on 'login'
+  const LOGIN_ENDPOINT = `${EXTERNAL_API_BASE_URL.replace(/\/$/, '')}/auth/login`;
   console.log(`[API Route] Attempting login to external API: ${LOGIN_ENDPOINT} with email: ${APP_EMAIL}`);
 
   try {
