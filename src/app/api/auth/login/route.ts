@@ -24,10 +24,6 @@ export async function POST(request: NextRequest) {
   const LOGIN_ENDPOINT = `${EXTERNAL_API_BASE_URL}/auth/login`;
 
   try {
-    // The passwordFromClient is passed from the client AuthForm, but for this specific API call,
-    // we are instructed to use the hardcoded API_PASSWORD from env vars.
-    // const { password: passwordFromClient } = await request.json();
-
     console.log(`[API Route] Attempting login to external API: ${LOGIN_ENDPOINT} with email: ${APP_EMAIL}`);
 
     const externalApiResponse = await fetch(LOGIN_ENDPOINT, {
@@ -38,7 +34,20 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({ email: APP_EMAIL, password: API_PASSWORD }),
     });
 
-    const responseData = await externalApiResponse.json();
+    const responseText = await externalApiResponse.text();
+    console.log(`[API Route] External API login response text (first 500 chars): ${responseText.substring(0, 500)}`);
+
+    let responseData;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error(`[API Route] Failed to parse JSON response from external API at ${LOGIN_ENDPOINT}. Status: ${externalApiResponse.status}. Error:`, parseError);
+      console.error(`[API Route] Raw response text was: ${responseText}`);
+      return NextResponse.json(
+        { message: `Authentication failed: Malformed or non-JSON response from authentication server. Status: ${externalApiResponse.status}` },
+        { status: 502 } // Bad Gateway, as proxy received invalid response
+      );
+    }
 
     if (!externalApiResponse.ok) {
       console.error(`[API Route] External API login failed with status ${externalApiResponse.status}:`, responseData);
