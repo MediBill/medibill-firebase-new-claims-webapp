@@ -11,8 +11,6 @@ interface CaseUpdateParams {
 }
 
 export async function PUT(request: NextRequest, { params }: CaseUpdateParams) {
-  // Environment variable check is removed as value is hardcoded above
-  
   const { caseId } = params;
   if (!caseId) {
     return NextResponse.json({ message: 'Case ID is missing from the path.' }, { status: 400 });
@@ -30,7 +28,7 @@ export async function PUT(request: NextRequest, { params }: CaseUpdateParams) {
     return NextResponse.json({ message: 'Invalid request body. Expected JSON with case data.' }, { status: 400 });
   }
 
-  // The external API endpoint for general update is /cases/submissions/update/{caseId}
+  // Corrected endpoint
   const UPDATE_CASE_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases/submissions/update/${caseId}`;
 
   try {
