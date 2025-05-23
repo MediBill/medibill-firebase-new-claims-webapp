@@ -17,12 +17,16 @@ export default function MediBillPage() {
   const [authToken, setAuthToken] = useState<AuthToken | null>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [cases, setCases] = useState<Case[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // Start as true if auth is not yet known
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
+  // Effect to manage loading state based on authToken presence
   useEffect(() => {
     if (!authToken) {
+        // If there's no auth token (e.g., on initial load before login),
+        // we are not actively "loading data" yet, so set loading to false.
+        // The AuthForm will be shown. Loading spinner should appear *after* successful login.
         setIsLoading(false); 
     }
   }, [authToken]);
@@ -30,12 +34,16 @@ export default function MediBillPage() {
   const handleLoginSuccess = (token: AuthToken) => {
     console.log("[Page] Login successful, token received:", token ? token.token.substring(0,10) + "..." : "null");
     setAuthToken(token);
-    setError(null);
-    setIsLoading(true); 
+    setError(null); // Clear previous errors
+    setIsLoading(true); // Start loading data
     fetchData(token.token);
   };
 
+  // Wrapper for the login API call from medibill-api.ts
   const apiLogin = async (password: string): Promise<AuthToken> => {
+    // This password comes from the AuthForm
+    // The actual login to the external API will use hardcoded credentials via the server-side proxy
+    console.log("[Page] apiLogin called. Password from form (used by proxy):", password ? "******" : "undefined");
     return apiLoginReal(password);
   };
 
@@ -50,7 +58,8 @@ export default function MediBillPage() {
       setDoctors(fetchedDoctors);
 
       if (fetchedDoctors && fetchedDoctors.length > 0) {
-        const doctorAccNos = fetchedDoctors.map(doc => doc.id); // doc.id is the user_id
+        // Ensure doctor.id is a string as expected by getAllCasesForDoctors
+        const doctorAccNos = fetchedDoctors.map(doc => String(doc.id)); 
         console.log("[Page] Doctor Account Numbers (user_ids) for case fetching:", doctorAccNos);
         
         console.log("[Page] Attempting to fetch cases for these doctors...");
@@ -62,7 +71,7 @@ export default function MediBillPage() {
             toast({ title: "No Cases Found", description: "No cases were returned for the available doctors." });
         }
       } else {
-        setCases([]); 
+        setCases([]); // Clear cases if no doctors are found
         toast({ title: "No Doctors Found", description: "No doctors available after filtering. Cannot fetch cases." });
         console.log("[Page] No doctors found or an empty array was returned by getDoctors.");
       }
@@ -77,25 +86,29 @@ export default function MediBillPage() {
     }
   };
   
+  // For debugging: Log cases state whenever it changes
   useEffect(() => {
     console.log("[Page] Cases state updated in useEffect:", cases);
   }, [cases]);
 
 
-  const handleCaseUpdateAttempt = async (caseId: number, updatedCasePayload: Partial<ApiCase>): Promise<{ success: boolean; updatedCase?: Case }> => {
-    if (!authToken) {
-      toast({ title: "Authentication Error", description: "Not authenticated.", variant: "destructive" });
+  // This function is passed to DoctorCaseTable. It uses the authToken from page state.
+  // The signature now matches apiUpdateCase from lib/medibill-api
+  const handleCaseUpdateAttempt = async (tokenFromCaller: string, caseId: number, updatedCasePayload: Partial<ApiCase>): Promise<{ success: boolean; updatedCase?: Case }> => {
+    if (!authToken || tokenFromCaller !== authToken.token) { // Ensure the token matches current auth state
+      toast({ title: "Authentication Error", description: "Authentication token mismatch or not available.", variant: "destructive" });
       return { success: false };
     }
-    // This now calls the general updateCase function from medibill-api
+    // Calls the general updateCase function from medibill-api
     return apiUpdateCase(authToken.token, caseId, updatedCasePayload);
   };
+
 
   if (!authToken) {
     return (
       <AuthForm
         onLoginSuccess={handleLoginSuccess}
-        loginApiCall={apiLogin}
+        loginApiCall={apiLogin} // This now correctly passes the form password to the internal proxy
       />
     );
   }
@@ -121,10 +134,11 @@ export default function MediBillPage() {
   
   return (
     <div className="container mx-auto py-2">
+      {/* No h2 title here anymore */}
       <DoctorCaseTable
         data={cases}
-        // Pass the general update function
-        updateCaseApi={handleCaseUpdateAttempt}
+        // Pass apiUpdateCase directly, DoctorCaseTable will provide the token
+        updateCaseApi={apiUpdateCase} 
         authToken={authToken.token} 
         isLoading={isLoading}
       />

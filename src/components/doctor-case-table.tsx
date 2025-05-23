@@ -39,9 +39,9 @@ import { CaseDetailSheet } from "./case-detail-sheet";
 
 interface DoctorCaseTableProps {
   data: Case[];
-  // This prop now expects to handle the full case update
+  // This prop now expects the full case update (token, caseId, payload)
   updateCaseApi: (token: string, caseId: number, payload: Partial<ApiCase>) => Promise<{ success: boolean; updatedCase?: Case }>;
-  authToken: string | null;
+  authToken: string | null; // Auth token string
   isLoading: boolean;
 }
 
@@ -55,10 +55,37 @@ const mapCaseToApiCasePayload = (caseObj: Case, newStatus: CaseStatus): Partial<
     ...apiCompatibleFields 
   } = caseObj;
 
-  return {
-    ...apiCompatibleFields, // Spread fields that are common or directly from ApiCase
+  // Ensure all fields required by the API are present, even if null from source
+  const payload: Partial<ApiCase> = {
+    id: apiCompatibleFields.id,
+    doctor_acc_no: apiCompatibleFields.doctor_acc_no,
+    patient_name: apiCompatibleFields.patient_name,
+    treating_surgeon: apiCompatibleFields.treating_surgeon,
+    weight: apiCompatibleFields.weight,
+    height: apiCompatibleFields.height,
+    service_date: apiCompatibleFields.service_date,
+    start_time: apiCompatibleFields.start_time,
+    end_time: apiCompatibleFields.end_time,
+    icd10_codes: apiCompatibleFields.icd10_codes,
+    procedure_codes: apiCompatibleFields.procedure_codes,
+    consultations: apiCompatibleFields.consultations,
+    ortho_modifiers: apiCompatibleFields.ortho_modifiers,
+    procedures: apiCompatibleFields.procedures,
+    modifiers: apiCompatibleFields.modifiers,
+    bp_start_time: apiCompatibleFields.bp_start_time,
+    bp_end_time: apiCompatibleFields.bp_end_time,
+    hospital_sticker_image_url: apiCompatibleFields.hospital_sticker_image_url,
+    admission_form_image_url: apiCompatibleFields.admission_form_image_url,
+    notes: apiCompatibleFields.notes,
+    birth_weight: apiCompatibleFields.birth_weight,
+    primary_assistant: apiCompatibleFields.primary_assistant,
+    secondary_assistant: apiCompatibleFields.secondary_assistant,
+    referring_service_provider: apiCompatibleFields.referring_service_provider,
+    referred_by_icd10: apiCompatibleFields.referred_by_icd10,
+    asa_level: apiCompatibleFields.asa_level,
     case_status: newStatus, // Set the case_status to the new desired status string
   };
+  return payload;
 };
 
 
@@ -86,17 +113,16 @@ export function DoctorCaseTable({ data, updateCaseApi, authToken, isLoading: ini
   }, [data]);
 
 
-  const handleSuccessfulUpdate = (caseId: number, newStatus: CaseStatus, updatedCaseFromApi?: Case) => {
+  const handleSuccessfulUpdateInTable = (caseId: number, newStatus: CaseStatus, updatedCaseFromApi?: Case) => {
     setTableData(prevData => 
-        prevData.map(c => (c.id === caseId && updatedCaseFromApi ? { ...c, ...updatedCaseFromApi, status: newStatus } : c))
+        prevData.map(c => (c.id === caseId ? { ...c, status: newStatus, ...(updatedCaseFromApi || {}) } : c))
     );
-    if (selectedCase && selectedCase.id === caseId && updatedCaseFromApi) {
-        setSelectedCase(prev => prev ? { ...prev, status: newStatus, ...updatedCaseFromApi } : null);
+    if (selectedCase && selectedCase.id === caseId) {
+        setSelectedCase(prev => prev ? { ...prev, status: newStatus, ...(updatedCaseFromApi || {}) } : null);
     }
   };
 
   // This function is called by columns.tsx and CaseDetailSheet.tsx
-  // It now prepares the full payload for the API.
   const triggerCaseStatusUpdate = async (caseToUpdate: Case, newStatus: CaseStatus) => {
     if (!authToken) {
       toast({ title: "Error", description: "Authentication token not found.", variant: "destructive" });
@@ -113,14 +139,15 @@ export function DoctorCaseTable({ data, updateCaseApi, authToken, isLoading: ini
     console.log('[DoctorCaseTable] Payload for API update:', payloadForApi);
 
     try {
-      // Call the prop which points to `handleCaseUpdateAttempt` in page.tsx
+      // Call the prop which points to apiUpdateCase in page.tsx (which in turn calls lib/medibill-api#updateCase)
       const result = await updateCaseApi(authToken, caseToUpdate.id, payloadForApi); 
+      
       if (result.success && result.updatedCase) {
-        handleSuccessfulUpdate(caseToUpdate.id, newStatus, result.updatedCase);
+        handleSuccessfulUpdateInTable(caseToUpdate.id, newStatus, result.updatedCase);
         toast({ title: "Success", description: `Case ID ${result.updatedCase.id} status updated to ${newStatus}.` });
       } else {
-        // Error message for failure will be based on what updateCaseApi (and ultimately updateCase in medibill-api) throws or returns
-        throw new Error(result.updatedCase?.notes || "Failed to update status from API. Check server logs.");
+        // Error message for failure will be based on what updateCaseApi (and ultimately updateCase in medibill-api) returns or throws
+        throw new Error( "Failed to update status. API did not confirm success or provide updated case.");
       }
     } catch (error) {
       toast({ title: "Error updating status", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
@@ -131,6 +158,7 @@ export function DoctorCaseTable({ data, updateCaseApi, authToken, isLoading: ini
   
   const isUpdatingStatus = (caseId: number) => !!updatingStatusMap[caseId];
 
+  // Pass triggerCaseStatusUpdate, which expects the full case object and the new status string.
   const columns = React.useMemo(() => getColumns(triggerCaseStatusUpdate, isUpdatingStatus), [authToken, tableData, updatingStatusMap]); 
 
   const table = useReactTable({
@@ -254,11 +282,12 @@ export function DoctorCaseTable({ data, updateCaseApi, authToken, isLoading: ini
                   onClick={(event) => {
                     let target = event.target as HTMLElement;
                     let isInteractiveClick = false;
+                    // Check if the click originated from an interactive element within the row
                     while (target && target !== event.currentTarget) {
                         if (target.dataset.radixSelectTrigger !== undefined || 
                             target.closest('[data-radix-select-content]') !== null ||
                             target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'checkbox' ||
-                            target.closest('button:not([data-disables-row-click="true"])') !== null ||
+                            target.closest('button:not([data-disables-row-click="true"])') !== null || // ensure button isn't specifically meant to NOT disable row click
                             target.closest('[role="menuitem"]') !== null ) {
                             isInteractiveClick = true;
                             break;
@@ -301,10 +330,12 @@ export function DoctorCaseTable({ data, updateCaseApi, authToken, isLoading: ini
             <CaseDetailSheet 
               caseDetails={selectedCase} 
               onClose={() => setIsSheetOpen(false)}
-              onUpdateStatus={async (newStatus) => { // This prop now just signals the new status
+              // This prop now just signals the new status string
+              onUpdateStatus={async (newStatus) => { 
                 if (selectedCase) {
-                  // Optimistically update sheet, table will update on success from triggerCaseStatusUpdate
+                  // Optimistically update sheet's view of the case
                   setSelectedCase(prev => prev ? {...prev, status: newStatus} : null);
+                  // Call the main handler in DoctorCaseTable to construct payload and make API call
                   await triggerCaseStatusUpdate(selectedCase, newStatus);
                 }
               }}
