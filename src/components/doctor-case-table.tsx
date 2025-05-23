@@ -30,7 +30,7 @@ import {
 import { DataTablePagination } from "./data-table-pagination";
 import { DataTableToolbar } from "./data-table-toolbar";
 import { getColumns } from "./columns";
-import type { Case, CaseStatus } from "@/types/medibill";
+import type { Case, CaseStatus, ApiCase } from "@/types/medibill";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -39,31 +39,43 @@ import { CaseDetailSheet } from "./case-detail-sheet";
 
 interface DoctorCaseTableProps {
   data: Case[];
-  updateCaseStatusApi: (token: string, caseId: number, newStatus: CaseStatus) => Promise<{ success: boolean; updatedCase?: Case }>;
+  // This prop now expects to handle the full case update
+  updateCaseApi: (token: string, caseId: number, payload: Partial<ApiCase>) => Promise<{ success: boolean; updatedCase?: Case }>;
   authToken: string | null;
   isLoading: boolean;
 }
 
-export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoading: initialLoading }: DoctorCaseTableProps) {
+// Helper to map client-side Case object to the payload expected by the external API
+const mapCaseToApiCasePayload = (caseObj: Case, newStatus: CaseStatus): Partial<ApiCase> => {
+  const { 
+    status, // client-side processed status
+    submittedDateTime, // client-side constructed field
+    original_case_status, // client-side tracking field
+    // any other fields specific to 'Case' type and not in 'ApiCase'
+    ...apiCompatibleFields 
+  } = caseObj;
+
+  return {
+    ...apiCompatibleFields, // Spread fields that are common or directly from ApiCase
+    case_status: newStatus, // Set the case_status to the new desired status string
+  };
+};
+
+
+export function DoctorCaseTable({ data, updateCaseApi, authToken, isLoading: initialLoading }: DoctorCaseTableProps) {
   const { toast } = useToast();
   const [rowSelection, setRowSelection] = React.useState({});
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
-     // Example: Hide doctor_acc_no by default if it's too technical for main view
-     // doctor_acc_no: false, 
-  });
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([
-    {
-      id: 'status',
-      value: 'NEW',
-    }
+    { id: 'status', value: 'NEW' }
   ]);
   const [sorting, setSorting] = React.useState<SortingState>([
-    { id: 'service_date', desc: true } // Sort by service_date descending by default
+    { id: 'service_date', desc: true }
   ]);
   const [globalFilter, setGlobalFilter] = React.useState(''); 
 
   const [isExporting, setIsExporting] = React.useState(false);
-  const [updatingStatusMap, setUpdatingStatusMap] = React.useState<Record<number, boolean>>({}); // Case ID is now number
+  const [updatingStatusMap, setUpdatingStatusMap] = React.useState<Record<number, boolean>>({});
   const [tableData, setTableData] = React.useState<Case[]>(data);
 
   const [selectedCase, setSelectedCase] = React.useState<Case | null>(null);
@@ -74,39 +86,52 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
   }, [data]);
 
 
-  const handleUpdateStatusInTableAndSheet = (caseId: number, newStatus: CaseStatus, updatedCase?: Case) => {
+  const handleSuccessfulUpdate = (caseId: number, newStatus: CaseStatus, updatedCaseFromApi?: Case) => {
     setTableData(prevData => 
-        prevData.map(c => (c.id === caseId && updatedCase ? { ...c, ...updatedCase, status: newStatus } : c))
+        prevData.map(c => (c.id === caseId && updatedCaseFromApi ? { ...c, ...updatedCaseFromApi, status: newStatus } : c))
     );
-    if (selectedCase && selectedCase.id === caseId) {
-        setSelectedCase(prev => prev ? { ...prev, status: newStatus, ...(updatedCase || {}) } : null);
+    if (selectedCase && selectedCase.id === caseId && updatedCaseFromApi) {
+        setSelectedCase(prev => prev ? { ...prev, status: newStatus, ...updatedCaseFromApi } : null);
     }
   };
 
-  const handleUpdateStatus = async (caseId: number, newStatus: CaseStatus) => {
+  // This function is called by columns.tsx and CaseDetailSheet.tsx
+  // It now prepares the full payload for the API.
+  const triggerCaseStatusUpdate = async (caseToUpdate: Case, newStatus: CaseStatus) => {
     if (!authToken) {
       toast({ title: "Error", description: "Authentication token not found.", variant: "destructive" });
       return;
     }
-    setUpdatingStatusMap(prev => ({ ...prev, [caseId]: true }));
+    if (!caseToUpdate) {
+      toast({ title: "Error", description: "Case data not found for update.", variant: "destructive" });
+      return;
+    }
+
+    setUpdatingStatusMap(prev => ({ ...prev, [caseToUpdate.id]: true }));
+    
+    const payloadForApi = mapCaseToApiCasePayload(caseToUpdate, newStatus);
+    console.log('[DoctorCaseTable] Payload for API update:', payloadForApi);
+
     try {
-      const result = await updateCaseStatusApi(authToken, caseId, newStatus);
+      // Call the prop which points to `handleCaseUpdateAttempt` in page.tsx
+      const result = await updateCaseApi(authToken, caseToUpdate.id, payloadForApi); 
       if (result.success && result.updatedCase) {
-        handleUpdateStatusInTableAndSheet(caseId, newStatus, result.updatedCase);
+        handleSuccessfulUpdate(caseToUpdate.id, newStatus, result.updatedCase);
         toast({ title: "Success", description: `Case ID ${result.updatedCase.id} status updated to ${newStatus}.` });
       } else {
-        throw new Error("Failed to update status from API.");
+        // Error message for failure will be based on what updateCaseApi (and ultimately updateCase in medibill-api) throws or returns
+        throw new Error(result.updatedCase?.notes || "Failed to update status from API. Check server logs.");
       }
     } catch (error) {
       toast({ title: "Error updating status", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     } finally {
-      setUpdatingStatusMap(prev => ({ ...prev, [caseId]: false }));
+      setUpdatingStatusMap(prev => ({ ...prev, [caseToUpdate.id]: false }));
     }
   };
   
   const isUpdatingStatus = (caseId: number) => !!updatingStatusMap[caseId];
 
-  const columns = React.useMemo(() => getColumns(handleUpdateStatus, isUpdatingStatus), [authToken, tableData]); 
+  const columns = React.useMemo(() => getColumns(triggerCaseStatusUpdate, isUpdatingStatus), [authToken, tableData, updatingStatusMap]); 
 
   const table = useReactTable({
     data: tableData,
@@ -130,10 +155,6 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
     getSortedRowModel: getSortedRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
-    meta: { // Pass functions or data to columns
-        updateStatus: handleUpdateStatus,
-        isUpdatingStatus: isUpdatingStatus,
-    }
   });
 
   const handleExport = () => {
@@ -141,19 +162,17 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
     try {
       const dataToExport = table.getFilteredRowModel().rows.map(row => {
         const originalData = row.original as Case;
-        // Map to a simpler structure for export, include more fields if needed
         return {
           "Case ID": originalData.id,
           "Patient Name": originalData.patient_name,
           "Treating Surgeon": originalData.treating_surgeon,
-          "Service Date": originalData.service_date ? format(parseISO(originalData.submittedDateTime), "yyyy-MM-dd") : "N/A",
+          "Service Date": originalData.service_date ? format(parseISO(originalData.service_date), "yyyy-MM-dd") : "N/A",
           "Start Time": originalData.start_time || "N/A",
           "End Time": originalData.end_time || "N/A",
           "Status": originalData.status,
           "ICD10 Codes": originalData.icd10_codes?.join(', ') || "N/A",
           "Procedure Codes": originalData.procedure_codes?.join(', ') || "N/A",
           "Notes": originalData.notes || "N/A",
-          // Add more fields from originalData as required for export
         };
       });
 
@@ -231,16 +250,15 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className="hover:bg-accent/20 cursor-pointer transition-colors" // Enhanced hover effect
+                  className="hover:bg-accent/20 cursor-pointer transition-colors"
                   onClick={(event) => {
                     let target = event.target as HTMLElement;
                     let isInteractiveClick = false;
-                    // Check if the click originated from an interactive element within the row
                     while (target && target !== event.currentTarget) {
                         if (target.dataset.radixSelectTrigger !== undefined || 
                             target.closest('[data-radix-select-content]') !== null ||
                             target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'checkbox' ||
-                            target.closest('button:not([data-disables-row-click="true"])') !== null || // Check for buttons, allow disabling row click for specific buttons
+                            target.closest('button:not([data-disables-row-click="true"])') !== null ||
                             target.closest('[role="menuitem"]') !== null ) {
                             isInteractiveClick = true;
                             break;
@@ -278,16 +296,16 @@ export function DoctorCaseTable({ data, updateCaseStatusApi, authToken, isLoadin
       <DataTablePagination table={table} />
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="w-full sm:max-w-2xl p-0 flex flex-col"> {/* Increased width to 2xl */}
+        <SheetContent className="w-full sm:max-w-2xl p-0 flex flex-col">
           {selectedCase && (
             <CaseDetailSheet 
               caseDetails={selectedCase} 
               onClose={() => setIsSheetOpen(false)}
-              onUpdateStatus={async (newStatus) => {
-                if (selectedCase && authToken) {
-                  // Optimistically update sheet, table will update on success
+              onUpdateStatus={async (newStatus) => { // This prop now just signals the new status
+                if (selectedCase) {
+                  // Optimistically update sheet, table will update on success from triggerCaseStatusUpdate
                   setSelectedCase(prev => prev ? {...prev, status: newStatus} : null);
-                  await handleUpdateStatus(selectedCase.id, newStatus);
+                  await triggerCaseStatusUpdate(selectedCase, newStatus);
                 }
               }}
               isUpdatingStatus={selectedCase ? isUpdatingStatus(selectedCase.id) : false}

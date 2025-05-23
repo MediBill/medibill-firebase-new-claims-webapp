@@ -6,8 +6,8 @@ import { useState, useEffect } from 'react';
 import { AuthForm } from '@/components/auth-form';
 import { DoctorCaseTable } from '@/components/doctor-case-table';
 // Import the actual login function from medibill-api
-import { login as apiLoginReal, getDoctors, getAllCasesForDoctors, updateCaseStatus as apiUpdateCaseStatus } from '@/lib/medibill-api';
-import type { AuthToken, Doctor, Case, CaseStatus } from '@/types/medibill';
+import { login as apiLoginReal, getDoctors, getAllCasesForDoctors, updateCase as apiUpdateCase } from '@/lib/medibill-api';
+import type { AuthToken, Doctor, Case, CaseStatus, ApiCase } from '@/types/medibill';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -17,16 +17,13 @@ export default function MediBillPage() {
   const [authToken, setAuthToken] = useState<AuthToken | null>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [cases, setCases] = useState<Case[]>([]);
-  const [isLoading, setIsLoading] = useState(true); // True initially until first data fetch attempt
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    // On initial load, if there's no token, we are in the login state.
-    // If a token were persisted (e.g. localStorage), we'd try to load and use it here.
-    // For now, isLoading controls the display until login or data fetch.
     if (!authToken) {
-        setIsLoading(false); // Stop loading if we are waiting for login
+        setIsLoading(false); 
     }
   }, [authToken]);
 
@@ -34,13 +31,11 @@ export default function MediBillPage() {
     console.log("[Page] Login successful, token received:", token ? token.token.substring(0,10) + "..." : "null");
     setAuthToken(token);
     setError(null);
-    setIsLoading(true); // Start loading for data fetch
+    setIsLoading(true); 
     fetchData(token.token);
   };
 
-  // Wrapper for the API login call to match AuthForm's expected signature (password only)
   const apiLogin = async (password: string): Promise<AuthToken> => {
-    // The email is hardcoded within apiLoginReal or not needed by it if it's a general app password
     return apiLoginReal(password);
   };
 
@@ -51,23 +46,25 @@ export default function MediBillPage() {
     try {
       console.log("[Page] Attempting to fetch doctors...");
       const fetchedDoctors = await getDoctors(token);
-      console.log("[Page] Fetched doctors:", fetchedDoctors);
+      console.log("[Page] Fetched doctors raw:", fetchedDoctors);
       setDoctors(fetchedDoctors);
 
       if (fetchedDoctors && fetchedDoctors.length > 0) {
-        const doctorAccNos = fetchedDoctors.map(doc => doc.id);
-        console.log("[Page] Doctor Account Numbers for case fetching:", doctorAccNos);
+        const doctorAccNos = fetchedDoctors.map(doc => doc.id); // doc.id is the user_id
+        console.log("[Page] Doctor Account Numbers (user_ids) for case fetching:", doctorAccNos);
+        
         console.log("[Page] Attempting to fetch cases for these doctors...");
         const fetchedCases = await getAllCasesForDoctors(token, doctorAccNos);
-        console.log("[Page] Fetched cases:", fetchedCases);
+        console.log("[Page] Fetched cases raw:", fetchedCases);
         setCases(fetchedCases);
+        console.log("[Page] Cases state *after* setCases:", fetchedCases); // Log what was set
         if (fetchedCases.length === 0) {
             toast({ title: "No Cases Found", description: "No cases were returned for the available doctors." });
         }
       } else {
-        setCases([]); // No doctors, so no cases
+        setCases([]); 
         toast({ title: "No Doctors Found", description: "No doctors available after filtering. Cannot fetch cases." });
-        console.log("[Page] No doctors found or an empty array was returned.");
+        console.log("[Page] No doctors found or an empty array was returned by getDoctors.");
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch data';
@@ -80,25 +77,25 @@ export default function MediBillPage() {
     }
   };
   
-  // Log cases state when it changes
   useEffect(() => {
-    console.log("[Page] Cases state updated:", cases);
+    console.log("[Page] Cases state updated in useEffect:", cases);
   }, [cases]);
 
 
-  const handleUpdateCaseStatus = async (caseId: number, newStatus: CaseStatus): Promise<{ success: boolean; updatedCase?: Case }> => {
+  const handleCaseUpdateAttempt = async (caseId: number, updatedCasePayload: Partial<ApiCase>): Promise<{ success: boolean; updatedCase?: Case }> => {
     if (!authToken) {
       toast({ title: "Authentication Error", description: "Not authenticated.", variant: "destructive" });
       return { success: false };
     }
-    return apiUpdateCaseStatus(authToken.token, caseId, newStatus);
+    // This now calls the general updateCase function from medibill-api
+    return apiUpdateCase(authToken.token, caseId, updatedCasePayload);
   };
 
   if (!authToken) {
     return (
       <AuthForm
         onLoginSuccess={handleLoginSuccess}
-        loginApiCall={apiLogin} // Pass the apiLogin wrapper
+        loginApiCall={apiLogin}
       />
     );
   }
@@ -113,9 +110,6 @@ export default function MediBillPage() {
     );
   }
 
-  // Show loading spinner if isLoading is true AND we don't have an error.
-  // If there's an error, the error Alert above takes precedence.
-  // Also, only show "Loading case data..." if we expect cases (i.e., after login).
   if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-[calc(100vh-200px)]">
@@ -129,11 +123,11 @@ export default function MediBillPage() {
     <div className="container mx-auto py-2">
       <DoctorCaseTable
         data={cases}
-        updateCaseStatusApi={(tokenFromTable, caseId, newStatus) => apiUpdateCaseStatus(tokenFromTable, caseId, newStatus)}
-        authToken={authToken.token} // DoctorCaseTable expects string | null, authToken.token is string
-        isLoading={isLoading} // Pass the loading state
+        // Pass the general update function
+        updateCaseApi={handleCaseUpdateAttempt}
+        authToken={authToken.token} 
+        isLoading={isLoading}
       />
     </div>
   );
 }
-

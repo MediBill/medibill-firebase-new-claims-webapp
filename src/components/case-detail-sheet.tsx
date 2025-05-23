@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import type { Case, CaseStatus } from "@/types/medibill";
+import type { Case, CaseStatus, ApiCase } from "@/types/medibill"; // ApiCase might be needed for payload
 import { format, parseISO } from 'date-fns';
 import { CalendarDays, User, BriefcaseMedical, FileText, Tag, CheckCircle, AlertTriangle, Hash, Weight, Ruler, Clock, ListChecks, Image as ImageIcon, Edit3, Thermometer, Activity } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -23,7 +23,9 @@ import { cn } from "@/lib/utils";
 interface CaseDetailSheetProps {
   caseDetails: Case;
   onClose: () => void;
-  onUpdateStatus: (newStatus: CaseStatus) => Promise<void>;
+  // This prop now just signals the new status. 
+  // The parent (DoctorCaseTable) will handle constructing the full API payload.
+  onUpdateStatus: (newStatus: CaseStatus) => Promise<void>; 
   isUpdatingStatus: boolean;
 }
 
@@ -52,14 +54,12 @@ const formatNullableNumber = (num?: number | null) => num !== null && num !== un
 const TimeDisplay: React.FC<{ label: string, time?: string | null }> = ({ label, time }) => {
   if (!time) return <DetailItem icon={<Clock className="text-primary" />} label={label} value="N/A" />;
   try {
-    // Assuming time is "HH:MM"
     const [hours, minutes] = time.split(':');
-    const date = new Date(); // Use a dummy date for time formatting
+    const date = new Date(); 
     date.setHours(parseInt(hours, 10));
     date.setMinutes(parseInt(minutes, 10));
     return <DetailItem icon={<Clock className="text-primary" />} label={label} value={format(date, "h:mm a")} />;
   } catch {
-    // Fallback if time format is unexpected
     return <DetailItem icon={<Clock className="text-primary" />} label={label} value={time} />; 
   }
 };
@@ -70,10 +70,10 @@ export function CaseDetailSheet({ caseDetails, onClose, onUpdateStatus, isUpdati
     id,
     patient_name,
     treating_surgeon,
-    service_date, // "YYYY-MM-DD"
+    service_date, 
     start_time,
     end_time,
-    status,
+    status, // This is the client-side processed status
     doctor_acc_no,
     weight,
     height,
@@ -94,14 +94,17 @@ export function CaseDetailSheet({ caseDetails, onClose, onUpdateStatus, isUpdati
     referring_service_provider,
     referred_by_icd10,
     asa_level,
-    // submittedDateTime is available if needed for other purposes
   } = caseDetails;
 
-  // Use service_date directly for formatting if it's "YYYY-MM-DD"
   const formattedServiceDate = service_date ? format(parseISO(service_date), "MMMM d, yyyy") : "N/A"; 
 
   const hasHospitalSticker = hospital_sticker_image_url && hospital_sticker_image_url.trim() !== "";
   const hasAdmissionForm = admission_form_image_url && admission_form_image_url.trim() !== "";
+
+  const handleStatusChange = (newSelectedStatus: string) => {
+    // Call the prop with just the new status string
+    onUpdateStatus(newSelectedStatus as CaseStatus);
+  };
 
   return (
     <ScrollArea className="h-full">
@@ -188,8 +191,8 @@ export function CaseDetailSheet({ caseDetails, onClose, onUpdateStatus, isUpdati
                 {status}
               </Badge>
             <Select
-              value={status}
-              onValueChange={(value) => onUpdateStatus(value as CaseStatus)}
+              value={status} // Use client-side processed status for display
+              onValueChange={handleStatusChange} // Calls prop with new status string
               disabled={isUpdatingStatus}
             >
               <SelectTrigger className="w-[180px] h-9 shadow-sm data-[disabled]:opacity-70 data-[disabled]:cursor-not-allowed">
@@ -257,7 +260,6 @@ const ImageItem: React.FC<ImageItemProps> = ({ label, url, dataAiHint }) => {
       <p className="text-xs text-muted-foreground flex items-center mb-1">
           <ImageIcon className="text-primary w-4 h-4 mr-2" />{label}
       </p>
-      {/* Using next/image for known placeholder structure, otherwise a link */}
       {url.startsWith('https://placehold.co/') ? (
           <Image src={url} alt={label} width={300} height={200} className="rounded border shadow-sm" data-ai-hint={dataAiHint} />
       ) : (
@@ -266,4 +268,3 @@ const ImageItem: React.FC<ImageItemProps> = ({ label, url, dataAiHint }) => {
     </div>
   );
 };
-

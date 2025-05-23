@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Case, CaseStatus } from "@/types/medibill";
+import type { Case, CaseStatus, ApiCase } from "@/types/medibill";
 import { format } from 'date-fns';
 import { Badge } from "@/components/ui/badge";
 
@@ -60,7 +60,8 @@ const getStatusBadgeIcon = (status: CaseStatus) => {
 
 
 export const getColumns = (
-  onUpdateStatus: (caseId: number, newStatus: CaseStatus) => Promise<void>,
+  // This function now expects the full case object and the new status
+  onTriggerStatusUpdate: (caseToUpdate: Case, newStatus: CaseStatus) => Promise<void>,
   isUpdatingStatus: (caseId: number) => boolean
 ): ColumnDef<Case>[] => [
   {
@@ -99,7 +100,6 @@ export const getColumns = (
     cell: ({ row }) => {
       const date = row.getValue("service_date");
       try {
-        // The service_date is already "YYYY-MM-DD", format expects a Date object or timestamp
         return format(new Date(date as string), "PP"); 
       } catch (error) {
         return date as string; 
@@ -145,7 +145,7 @@ export const getColumns = (
               {availableStatuses.map((statusOption) => (
                 <DropdownMenuItem
                   key={statusOption}
-                  onClick={() => onUpdateStatus(currentCase.id, statusOption)}
+                  onClick={() => onTriggerStatusUpdate(currentCase, statusOption)} // Pass the full case and new status
                   disabled={currentStatus === statusOption || updating}
                   className="capitalize"
                 >
