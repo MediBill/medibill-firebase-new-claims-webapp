@@ -5,7 +5,6 @@ import type { ApiCase } from '@/types/medibill';
 
 const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
 
-// This route will handle POST to fetch cases and filter them
 export async function POST(request: NextRequest) {
   if (!EXTERNAL_API_BASE_URL || !EXTERNAL_API_BASE_URL.startsWith('http')) {
     console.error('[API Cases Route Error] NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL:', EXTERNAL_API_BASE_URL);
@@ -14,8 +13,11 @@ export async function POST(request: NextRequest) {
 
   const token = request.headers.get('Authorization')?.split('Bearer ')[1];
   if (!token) {
+    console.warn('[API Cases Route] Authorization token is missing from request headers.');
     return NextResponse.json({ message: 'Authorization token is missing.' }, { status: 401 });
   }
+  console.log(`[API Cases Route] Token received: ${token ? token.substring(0, 10) + '...' : 'null'}`);
+
 
   let doctorAccNos: string[] = [];
   try {
@@ -23,24 +25,17 @@ export async function POST(request: NextRequest) {
     if (body.doctorAccNos && Array.isArray(body.doctorAccNos)) {
       doctorAccNos = body.doctorAccNos;
     } else {
-        // If doctorAccNos is not provided or not an array, proceed to fetch all cases for the user (as per original external API behavior)
-        // The client-side logic used to filter, so here we might return all or enforce this field.
-        // For now, if not provided, we'll fetch all and the client-side logic used to handle it.
-        // However, the request now requires doctorAccNos to be meaningful for this proxy.
-        // Let's assume if it's not present or empty, we still fetch all and let the client handle if needed,
-        // or the client should always send it for filtering.
-        // For consistency with the original request, if no doctorAccNos, it means fetch all for the user.
+        console.warn('[API Cases Route] doctorAccNos not provided in request body or not an array. Will fetch all cases for the user from external API.');
     }
+    console.log(`[API Cases Route] Received doctorAccNos for filtering: ${JSON.stringify(doctorAccNos)}`);
   } catch (e) {
     console.warn('[API Cases Route] Could not parse doctorAccNos from request body or body is not JSON. Fetching all cases for the user.');
-    // Proceed to fetch all cases if body is not as expected or parsing fails
   }
 
-
   const CASES_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases`;
+  console.log(`[API Cases Route] Proxied request to external API: ${CASES_ENDPOINT_EXTERNAL}`);
 
   try {
-    console.log(`[API Cases Route] Proxied request to: ${CASES_ENDPOINT_EXTERNAL}`);
     const externalApiResponse = await fetch(CASES_ENDPOINT_EXTERNAL, {
       method: 'GET', // External API is GET
       headers: {
@@ -49,23 +44,41 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const responseData: ApiCase[] = await externalApiResponse.json();
+    const responseDataText = await externalApiResponse.text(); // Read as text first for robust logging
+    let responseData: ApiCase[];
+
+    try {
+        responseData = JSON.parse(responseDataText);
+    } catch (jsonError) {
+        console.error(`[API Cases Route] Failed to parse JSON response from external API (${CASES_ENDPOINT_EXTERNAL}). Status: ${externalApiResponse.status}. Response Text: ${responseDataText.substring(0, 500)}...`);
+        return NextResponse.json({ message: 'Malformed response from external case data provider.' }, { status: 502 });
+    }
+    
+    console.log(`[API Cases Route] Raw response from external API (${CASES_ENDPOINT_EXTERNAL}): Status ${externalApiResponse.status}, Body: ${JSON.stringify(responseData).substring(0, 500)}...`);
 
     if (!externalApiResponse.ok) {
       console.error(`[API Cases Route] External API error from ${CASES_ENDPOINT_EXTERNAL} with status ${externalApiResponse.status}:`, responseData);
-      const errorBody = responseData as any;
+      const errorBody = responseData as any; // Type assertion for error handling
       return NextResponse.json(
         { message: errorBody.message || errorBody.detail || `External API error for cases: ${externalApiResponse.status}` },
         { status: externalApiResponse.status }
       );
     }
+    
+    if (!Array.isArray(responseData)) {
+      console.error(`[API Cases Route] External API at ${CASES_ENDPOINT_EXTERNAL} did not return an array for cases:`, responseData);
+      return NextResponse.json({ message: 'Received malformed case data (expected an array) from external API.' }, { status: 502 });
+    }
 
-    // Filter cases on the server if doctorAccNos were provided and are not empty
     let filteredCases = responseData;
     if (doctorAccNos.length > 0) {
+        console.log(`[API Cases Route] Filtering ${responseData.length} cases based on ${doctorAccNos.length} doctorAccNos.`);
         filteredCases = responseData.filter(apiCase =>
             apiCase.doctor_acc_no && doctorAccNos.includes(apiCase.doctor_acc_no)
         );
+        console.log(`[API Cases Route] Found ${filteredCases.length} cases after filtering.`);
+    } else {
+        console.log(`[API Cases Route] No doctorAccNos provided for filtering, returning all ${responseData.length} cases received from external API.`);
     }
     
     return NextResponse.json(filteredCases, { status: 200 });
@@ -74,7 +87,7 @@ export async function POST(request: NextRequest) {
     console.error('[API Cases Route] Internal error during cases proxy:', error);
     let message = 'Internal server error during cases proxy.';
     if (error instanceof Error) {
-        message = error.message.includes('fetch') ? 'Network error or external API unreachable for cases.' : error.message;
+        message = error.message.includes('fetch') ? `Network error or external API unreachable for cases at ${CASES_ENDPOINT_EXTERNAL}.` : error.message;
     }
     return NextResponse.json({ message }, { status: 500 });
   }

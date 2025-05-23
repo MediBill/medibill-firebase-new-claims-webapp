@@ -14,13 +14,15 @@ export async function GET(request: NextRequest) {
   const token = request.headers.get('Authorization')?.split('Bearer ')[1];
 
   if (!token) {
+    console.warn('[API Doctors Route] Authorization token is missing from request headers.');
     return NextResponse.json({ message: 'Authorization token is missing.' }, { status: 401 });
   }
+  console.log(`[API Doctors Route] Token received: ${token ? token.substring(0, 10) + '...' : 'null'}`);
 
   const DOCTORS_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/doctors`;
+  console.log(`[API Doctors Route] Proxied request to external API: ${DOCTORS_ENDPOINT_EXTERNAL}`);
 
   try {
-    console.log(`[API Doctors Route] Proxied request to: ${DOCTORS_ENDPOINT_EXTERNAL}`);
     const externalApiResponse = await fetch(DOCTORS_ENDPOINT_EXTERNAL, {
       method: 'GET',
       headers: {
@@ -30,6 +32,8 @@ export async function GET(request: NextRequest) {
     });
 
     const responseData = await externalApiResponse.json();
+    console.log(`[API Doctors Route] Raw response from external API (${DOCTORS_ENDPOINT_EXTERNAL}): Status ${externalApiResponse.status}, Body: ${JSON.stringify(responseData).substring(0, 500)}...`);
+
 
     if (!externalApiResponse.ok) {
       console.error(`[API Doctors Route] External API error from ${DOCTORS_ENDPOINT_EXTERNAL} with status ${externalApiResponse.status}:`, responseData);
@@ -39,24 +43,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Ensure the response data is an array, as expected by the client
     if (!Array.isArray(responseData)) {
       console.error(`[API Doctors Route] External API at ${DOCTORS_ENDPOINT_EXTERNAL} did not return an array for doctors:`, responseData);
-      // Attempt to see if it's a common wrapper object like { doctors: [] }
-      if (responseData && typeof responseData === 'object' && Array.isArray(responseData.doctors)) {
-        return NextResponse.json(responseData.doctors, { status: 200 });
+      if (responseData && typeof responseData === 'object' && Array.isArray((responseData as any).doctors)) {
+         console.log('[API Doctors Route] Found doctors in a "doctors" property, returning that array.');
+        return NextResponse.json((responseData as any).doctors, { status: 200 });
       }
-      return NextResponse.json({ message: 'Received malformed doctor data from external API.' }, { status: 502 }); // Bad Gateway
+      return NextResponse.json({ message: 'Received malformed doctor data from external API (expected an array).' }, { status: 502 }); // Bad Gateway
     }
     
+    console.log(`[API Doctors Route] Successfully fetched and returning ${responseData.length} doctors.`);
     return NextResponse.json(responseData, { status: 200 });
   } catch (error) {
     console.error('[API Doctors Route] Internal error during doctors proxy:', error);
     let message = 'Internal server error during doctors proxy.';
     if (error instanceof Error) {
-        message = error.message.includes('fetch') ? 'Network error or external API unreachable for doctors.' : error.message;
+        message = error.message.includes('fetch') ? `Network error or external API unreachable for doctors at ${DOCTORS_ENDPOINT_EXTERNAL}.` : error.message;
     }
     return NextResponse.json({ message }, { status: 500 });
   }
 }
-
