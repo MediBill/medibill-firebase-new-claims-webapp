@@ -27,17 +27,16 @@ export async function POST(request: NextRequest) {
     console.warn('[API Cases Route] Could not parse doctorAccNos from request body or body is not JSON. Fetching all cases for the user.');
   }
 
-  const CASES_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases`;
+  // Updated to use /cases/submissions/
+  const CASES_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases/submissions`;
   console.log(`[API Cases Route] Proxied GET request to external API: ${CASES_ENDPOINT_EXTERNAL}`);
 
   try {
     // The external API for cases is a GET request.
-    // Content-Type header is generally not needed for GET requests without a body.
     const externalApiResponse = await fetch(CASES_ENDPOINT_EXTERNAL, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
-        // 'Content-Type': 'application/json', // Removed for GET request
       },
     });
 
