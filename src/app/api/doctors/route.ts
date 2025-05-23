@@ -2,23 +2,18 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
+// Hardcoded for dev/testing as per user request
+const EXTERNAL_API_BASE_URL = "https://api.medibill.co.za/api/v1";
+
 export async function GET(request: NextRequest) {
-  const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
-
-  if (!EXTERNAL_API_BASE_URL || !EXTERNAL_API_BASE_URL.startsWith('http')) {
-    console.error('[API Doctors Route Error] NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL:', EXTERNAL_API_BASE_URL);
-    return NextResponse.json({ message: 'Server configuration error: API base URL not set.' }, { status: 500 });
-  }
-
   const token = request.headers.get('Authorization')?.split('Bearer ')[1];
 
   if (!token) {
-    console.warn('[API Doctors Route] Authorization token is missing from request headers.');
+    // console.warn('[API Doctors Route] Authorization token is missing from request headers.'); // Removed for prod
     return NextResponse.json({ message: 'Authorization token is missing.' }, { status: 401 });
   }
-  // console.log(`[API Doctors Route] Token received: ${token ? token.substring(0, 10) + '...' : 'null'}`); // Removed for prod
 
-  const DOCTORS_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL.replace(/\/$/, '')}/doctors`;
+  const DOCTORS_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/doctors`;
   // console.log(`[API Doctors Route] Proxied GET request to external API: ${DOCTORS_ENDPOINT_EXTERNAL}`); // Removed for prod
 
   try {
@@ -38,7 +33,6 @@ export async function GET(request: NextRequest) {
         const errorJson = JSON.parse(responseDataText);
         message = errorJson.message || errorJson.detail || message;
       } catch (e) {
-        // Keep message as is or use short part of responseDataText if not too long
         message = responseDataText.length < 100 ? responseDataText : message;
       }
       return NextResponse.json({ message }, { status: externalApiResponse.status });
@@ -52,11 +46,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: 'Malformed JSON response from external doctors API.' }, { status: 502 });
     }
 
-    // console.log(`[API Doctors Route] Raw response from external API (${DOCTORS_ENDPOINT_EXTERNAL}): Status ${externalApiResponse.status}, Body: ${JSON.stringify(responseData).substring(0, 200)}...`); // Removed for prod
-
     if (responseData && typeof responseData === 'object' && responseData.status === 'success' && Array.isArray(responseData.doctors)) {
       // console.log(`[API Doctors Route] Successfully fetched. Returning ${responseData.doctors.length} doctors from 'doctors' property.`); // Removed for prod
-      return NextResponse.json(responseData.doctors, { status: 200 });
+      
+      // Set cache headers: Cache for 5 minutes on CDN, 1 minute on client, allow stale for 1 hour
+      const headers = new Headers();
+      headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
+      headers.set('Content-Type', 'application/json');
+
+      return new NextResponse(JSON.stringify(responseData.doctors), {
+        status: 200,
+        headers: headers,
+      });
     } else {
       console.error(`[API Doctors Route] External API at ${DOCTORS_ENDPOINT_EXTERNAL} did not return the expected {status: "success", doctors: [...]} structure:`, responseData);
       return NextResponse.json({ message: 'Received malformed doctor data structure from external API.' }, { status: 502 });
