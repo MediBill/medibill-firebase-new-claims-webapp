@@ -33,7 +33,7 @@ export async function PUT(request: NextRequest, { params }: CaseUpdateParams) {
   }
 
   // The external API endpoint for general update is /cases/submissions/update/{caseId}
-  const UPDATE_CASE_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases/submissions/update/${caseId}`;
+  const UPDATE_CASE_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}cases/submissions/update/${caseId}`;
 
   try {
     console.log(`[API Case Update Route] Proxied PUT request for case ${caseId} to: ${UPDATE_CASE_ENDPOINT_EXTERNAL}`);

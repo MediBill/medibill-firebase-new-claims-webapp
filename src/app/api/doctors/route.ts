@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   }
   console.log(`[API Doctors Route] Token received: ${token ? token.substring(0, 10) + '...' : 'null'}`);
 
-  const DOCTORS_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/doctors`;
+  const DOCTORS_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}doctors`;
   console.log(`[API Doctors Route] Proxied request to external API: ${DOCTORS_ENDPOINT_EXTERNAL}`);
 
   try {

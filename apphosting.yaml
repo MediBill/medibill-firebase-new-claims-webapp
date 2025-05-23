@@ -22,7 +22,7 @@ env:
       - BUILD
       - RUNTIME
   - variable: NEXT_PUBLIC_MEDIBILL_API_BASE_URL
-    value: "https://api.medibill.co.za/api/v1"
+    value: "https://api.medibill.co.za/api/v1/"
     availability:
       - BUILD
       - RUNTIME

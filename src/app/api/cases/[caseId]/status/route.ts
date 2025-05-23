@@ -36,7 +36,7 @@ export async function PUT(request: NextRequest, { params }: StatusUpdateParams) 
     return NextResponse.json({ message: 'Invalid request body. Expected JSON with case_status.' }, { status: 400 });
   }
 
-  const UPDATE_STATUS_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases/${caseId}/status`;
+  const UPDATE_STATUS_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}cases/${caseId}/status`;
 
   try {
     console.log(`[API Case Status Route] Proxied PUT request for case ${caseId} to: ${UPDATE_STATUS_ENDPOINT_EXTERNAL} with status ${newStatus}`);

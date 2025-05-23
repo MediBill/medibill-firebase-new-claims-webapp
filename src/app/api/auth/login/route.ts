@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Server configuration error: API password not set.' }, { status: 500 });
   }
 
-  const LOGIN_ENDPOINT = `${EXTERNAL_API_BASE_URL}/auth/login`;
+  const LOGIN_ENDPOINT = `${EXTERNAL_API_BASE_URL}auth/login`;
 
   try {
     // const { password: passwordFromClient } = await request.json();
