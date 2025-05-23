@@ -32,7 +32,8 @@ export async function PUT(request: NextRequest, { params }: StatusUpdateParams) 
     return NextResponse.json({ message: 'Invalid request body. Expected JSON with case_status.' }, { status: 400 });
   }
 
-  const UPDATE_STATUS_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases/${caseId}/status`;
+  // Updated endpoint to include /submissions/
+  const UPDATE_STATUS_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases/submissions/${caseId}/status`;
 
   try {
     console.log(`[API Case Status Route] Proxied PUT request for case ${caseId} to: ${UPDATE_STATUS_ENDPOINT_EXTERNAL} with status ${newStatus}`);
@@ -70,14 +71,16 @@ export async function PUT(request: NextRequest, { params }: StatusUpdateParams) 
       // For now, we assume it returns the updated case object.
       return NextResponse.json(updatedCase, { status: 200 });
     } catch (jsonError) {
-      console.error(`[API Case Status Route] Failed to parse JSON response from external API after successful status update for case ${caseId}. Text: ${responseDataText}`, jsonError);
+      console.warn(`[API Case Status Route] Failed to parse JSON response from external API after successful status update for case ${caseId}. Text: ${responseDataText.substring(0,100)}... This might be okay if the API returns empty body on success.`);
       // If the external API returns 200 OK but not valid JSON (e.g., empty or plain text "Success")
-      // This indicates a mismatch in expectation. For now, return an error.
-      // Potentially, if an empty 200/204 is valid, the client might need to re-fetch or just assume success.
-      return NextResponse.json({ message: 'Status updated successfully, but failed to parse confirmation from external API.' }, { status: 502 }); // 502 Bad Gateway, as proxy got unexpected response
+      // This could be an acceptable success state for some APIs.
+      // For now, we'll return a success message, but the client might need to re-fetch or assume success.
+      // Or, if the API is supposed to return the updated object, this is still an issue.
+      return NextResponse.json({ message: 'Status updated successfully with external API, but response was not the expected case object.' }, { status: 200 });
     }
 
-  } catch (error) {
+  } catch (error)
+ {
     console.error(`[API Case Status Route] Internal error during case status update proxy for case ${caseId}:`, error);
     let message = 'Internal server error during case status update proxy.';
     if (error instanceof Error) {
