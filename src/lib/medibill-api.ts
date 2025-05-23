@@ -6,43 +6,40 @@ const INTERNAL_LOGIN_ENDPOINT = '/api/auth/login';
 
 // Internal Next.js API routes for other operations
 const INTERNAL_DOCTORS_ENDPOINT = '/api/doctors';
-const INTERNAL_CASES_ENDPOINT = '/api/cases'; // Will be a POST to send doctorAccNos
+const INTERNAL_CASES_ENDPOINT = '/api/cases';
 const INTERNAL_CASE_STATUS_UPDATE_ENDPOINT_TEMPLATE = '/api/cases/[caseId]/status';
 const INTERNAL_CASE_GENERAL_UPDATE_ENDPOINT_TEMPLATE = '/api/cases/[caseId]/update';
 
 
 const processApiCase = (apiCase: ApiCase): Case => {
-  let status: CaseStatus = 'NEW'; // Default to NEW
+  let status: CaseStatus = 'NEW';
   if (apiCase.case_status === 'PROCESSED') {
     status = 'PROCESSED';
   } else if (apiCase.case_status === 'NEW') {
     status = 'NEW';
   }
-  // If case_status is empty, null, undefined, or any other value, it defaults to 'NEW' as per initialization
 
-  const validServiceDate = apiCase.service_date && apiCase.service_date.match(/^\d{4}-\d{2}-\d{2}$/) 
-    ? apiCase.service_date 
-    : '1970-01-01'; // Fallback for invalid or missing date
-  
-  let validStartTimeString = '00:00:00'; // Default to midnight if start_time is invalid or missing
+  const validServiceDate = apiCase.service_date && apiCase.service_date.match(/^\d{4}-\d{2}-\d{2}$/)
+    ? apiCase.service_date
+    : '1970-01-01';
+
+  let validStartTimeString = '00:00:00';
   if (apiCase.start_time && typeof apiCase.start_time === 'string') {
-    if (apiCase.start_time.match(/^\d{2}:\d{2}:\d{2}$/)) { // HH:MM:SS
+    if (apiCase.start_time.match(/^\d{2}:\d{2}:\d{2}$/)) {
       validStartTimeString = apiCase.start_time;
-    } else if (apiCase.start_time.match(/^\d{2}:\d{2}$/)) { // HH:MM
+    } else if (apiCase.start_time.match(/^\d{2}:\d{2}$/)) {
       validStartTimeString = `${apiCase.start_time}:00`;
     }
-    // If format is still not matched, it remains '00:00:00'
   }
   
-  // Ensure a valid ISO string for submittedDateTime, crucial for date operations
   const submittedDateTime = `${validServiceDate}T${validStartTimeString}Z`;
 
   return {
     ...apiCase,
-    id: Number(apiCase.id), // Ensure ID is a number
+    id: Number(apiCase.id),
     status,
     submittedDateTime,
-    original_case_status: apiCase.case_status || '', // Store original status if needed
+    original_case_status: apiCase.case_status || '',
   };
 };
 
@@ -54,9 +51,7 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
       headers: {
         'Content-Type': 'application/json',
       },
-      // The passwordFromForm is sent to the internal proxy.
-      // The proxy then uses the hardcoded API_PASSWORD for the external call.
-      body: JSON.stringify({ password: passwordFromForm }), 
+      body: JSON.stringify({ password: passwordFromForm }),
     });
 
     const responseData = await response.json();
@@ -71,16 +66,15 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
       throw new Error(errMsg);
     }
 
-    // Based on provided API response: { "status": "success", "token": "..." }
-    if (responseData.status === 'success' && responseData.token) {
-      console.log('[MediBill API Client] Login via internal proxy successful.');
+    // The internal proxy /api/auth/login directly returns an AuthToken object { token: string, expiresAt: number }
+    if (responseData && typeof responseData.token === 'string' && typeof responseData.expiresAt === 'number') {
+      console.log('[MediBill API Client] Login via internal proxy successful. Token and expiresAt received.');
       return {
         token: responseData.token,
-        // If the external API provides an expiry, use it, otherwise default (set by proxy if needed)
-        expiresAt: responseData.expires_in ? Date.now() + responseData.expires_in * 1000 : Date.now() + 3600 * 1000, 
+        expiresAt: responseData.expiresAt,
       };
     } else {
-      const message = `Login successful (HTTP ${response.status}), but token data from internal proxy is missing or in an unexpected format. Response: ${JSON.stringify(responseData).substring(0,500)}...`;
+      const message = `Login successful (HTTP ${response.status}), but token data from internal proxy is missing or in an unexpected format. Expected { token: string, expiresAt: number }. Response: ${JSON.stringify(responseData).substring(0,500)}...`;
       console.error("Unexpected successful login response structure from internal proxy:", responseData);
       throw new Error(message);
     }
@@ -114,7 +108,7 @@ export const getDoctors = async (token: string): Promise<Doctor[]> => {
       },
     });
 
-    const responseDataText = await response.text(); // Read as text first for robust logging
+    const responseDataText = await response.text(); 
 
     if (!response.ok) {
       let errorMessage = `Failed to fetch doctors via proxy ${INTERNAL_DOCTORS_ENDPOINT}: ${response.status}`;
@@ -138,12 +132,11 @@ export const getDoctors = async (token: string): Promise<Doctor[]> => {
 
     if (Array.isArray(responseData)) {
       const doctors: Doctor[] = responseData;
-      // The filtering for 'TEST' practiceName is done on the server-side proxy now.
       console.log(`[MediBill API Client] Doctors received from proxy: ${doctors.length}`);
       return doctors;
     } else {
       console.warn(`[MediBill API Client] getDoctors (via proxy) received non-array data from ${INTERNAL_DOCTORS_ENDPOINT}:`, responseData);
-      return []; // Return empty array if not an array to prevent .filter errors downstream
+      return [];
     }
 
   } catch (error) {
@@ -172,7 +165,7 @@ export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[
       body: JSON.stringify({ doctorAccNos }), 
     });
 
-    const responseDataText = await response.text(); // Read as text first
+    const responseDataText = await response.text(); 
 
     if (!response.ok) {
       let errorMessage = `Failed to fetch cases via proxy ${INTERNAL_CASES_ENDPOINT}: ${response.status}`;
@@ -201,7 +194,7 @@ export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[
         return processedCases;
     } else {
         console.warn(`[MediBill API Client] getAllCasesForDoctors (via proxy) received non-array data from ${INTERNAL_CASES_ENDPOINT}:`, responseData);
-        return []; // Return empty to prevent downstream errors
+        return []; 
     }
 
   } catch (error) {
@@ -231,7 +224,7 @@ export const updateCaseStatus = async (token: string, caseId: number, newStatus:
       body: JSON.stringify({ case_status: newStatus }),
     });
 
-    const responseDataText = await response.text(); // Read as text first
+    const responseDataText = await response.text(); 
 
     if (!response.ok) {
        let errorMessage = `Failed to update case status via proxy for case ID ${caseId} to ${newStatus} at ${url}: ${response.status}`;
@@ -278,14 +271,14 @@ export const updateCase = async (token: string, caseId: number, updatedCaseData:
       body: JSON.stringify(updatedCaseData),
     });
 
-    const responseDataText = await response.text(); // Read as text first
+    const responseDataText = await response.text(); 
 
     if (!response.ok) {
       let errorMessage = `Failed to update case ${caseId} via proxy at ${url}: ${response.status}`;
       try {
         const errorData = JSON.parse(responseDataText);
         errorMessage += ` - Server: ${errorData.message || errorData.detail || responseDataText}`;
-      } catch (e) { errorMessage += ` - Body: ${errorText.substring(0,200)}...`; }
+      } catch (e) { errorMessage += ` - Body: ${responseDataText.substring(0,200)}...`; } // Changed errorText to responseDataText
       console.error(errorMessage);
       throw new Error(errorMessage);
     }
@@ -303,4 +296,3 @@ export const updateCase = async (token: string, caseId: number, updatedCaseData:
     throw error instanceof Error ? error : new Error(`An unknown error occurred while updating case ${caseId} via proxy.`);
   }
 };
-
