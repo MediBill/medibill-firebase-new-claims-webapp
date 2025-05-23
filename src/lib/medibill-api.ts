@@ -1,26 +1,12 @@
 
 import type { AuthToken, Doctor, Case, CaseStatus, ApiCase } from '@/types/medibill';
 
-// API Endpoints configuration using environment variables
-const EXTERNAL_API_BASE_URL_FROM_ENV = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
-// const APP_EMAIL_FROM_ENV = process.env.NEXT_PUBLIC_MEDIBILL_APP_EMAIL; // No longer needed directly in client-side login
-// const API_PASSWORD_FROM_ENV = process.env.NEXT_PUBLIC_MEDIBILL_API_PASSWORD; // No longer needed directly in client-side login
-
-// Internal Next.js API route for login
+// Internal Next.js API route for login (this is now the primary way to login)
 const INTERNAL_LOGIN_ENDPOINT = '/api/auth/login';
 
-
-// For direct calls to external API (doctors, cases) - these will still face CORS if not configured on external server
-const DOCTORS_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL_FROM_ENV}/doctors`;
-const CASES_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL_FROM_ENV}/cases`;
-const UPDATE_CASE_STATUS_ENDPOINT_TEMPLATE_EXTERNAL = `${CASES_ENDPOINT_EXTERNAL}/{caseId}/status`;
-
-
-// Initial check for critical configuration for external calls
-if (!EXTERNAL_API_BASE_URL_FROM_ENV || typeof EXTERNAL_API_BASE_URL_FROM_ENV !== 'string' || !EXTERNAL_API_BASE_URL_FROM_ENV.startsWith('http')) {
-  const errorMsg = `CRITICAL CONFIGURATION ERROR in medibill-api.ts: NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL for external API calls. Current value: '${EXTERNAL_API_BASE_URL_FROM_ENV}'.`;
-  console.error(errorMsg);
-}
+// Environment variables - will be checked within functions that use them directly.
+// const APP_EMAIL = process.env.NEXT_PUBLIC_MEDIBILL_APP_EMAIL; // Used in the /api/auth/login route
+// const API_PASSWORD = process.env.NEXT_PUBLIC_MEDIBILL_API_PASSWORD; // Used in the /api/auth/login route
 
 
 const processApiCase = (apiCase: ApiCase): Case => {
@@ -31,13 +17,14 @@ const processApiCase = (apiCase: ApiCase): Case => {
     status = 'NEW';
   }
 
+  // Ensure service_date is valid and start_time is in HH:MM format
+  const validServiceDate = apiCase.service_date && apiCase.service_date.match(/^\d{4}-\d{2}-\d{2}$/) ? apiCase.service_date : '1970-01-01';
   const validStartTimeString = apiCase.start_time && apiCase.start_time.match(/^\d{2}:\d{2}$/)
     ? apiCase.start_time
     : '00:00';
-  const fullStartTime = validStartTimeString.length === 5 ? `${validStartTimeString}:00` : validStartTimeString;
-  
-  // Ensure service_date is valid before creating submittedDateTime
-  const submittedDateTime = apiCase.service_date ? `${apiCase.service_date}T${fullStartTime}Z` : new Date(0).toISOString();
+  const fullStartTime = validStartTimeString.length === 5 ? `${validStartTimeString}:00` : validStartTimeString; // Ensure seconds part
+
+  const submittedDateTime = `${validServiceDate}T${fullStartTime}Z`;
 
 
   return {
@@ -56,9 +43,7 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
       headers: {
         'Content-Type': 'application/json',
       },
-      // We send the password from the form to our internal API route.
-      // The internal route will then use the configured credentials for the external API.
-      body: JSON.stringify({ password: passwordFromForm }),
+      body: JSON.stringify({ password: passwordFromForm }), // Server-side route uses configured credentials
     });
 
     const responseData = await response.json();
@@ -67,10 +52,12 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
       let errMsg = `Internal API login request to ${INTERNAL_LOGIN_ENDPOINT} failed with status ${response.status}.`;
       errMsg += ` Server message: ${responseData.message || responseData.detail || JSON.stringify(responseData)}`;
       console.error(errMsg, responseData);
+      if (response.status === 404 && typeof responseData === 'string' && responseData.includes("This page could not be found")) {
+        errMsg += " This might indicate the internal API route itself is not found.";
+      }
       throw new Error(errMsg);
     }
 
-    // Assuming the internal API route returns AuthToken structure directly on success
     if (responseData.token && responseData.expiresAt) {
        console.log('[MediBill API Client] Login via internal proxy successful.');
       return responseData as AuthToken;
@@ -83,7 +70,7 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
   } catch (error) {
     let detailedErrorMessage = `Client-side error during login via internal proxy ${INTERNAL_LOGIN_ENDPOINT}.`;
      if (error instanceof TypeError && error.message.toLowerCase().includes("failed to fetch")) {
-      detailedErrorMessage = `Client-side API Login Error: "Failed to fetch from internal endpoint ${INTERNAL_LOGIN_ENDPOINT}. This usually means the Next.js server itself is not reachable or the API route is misconfigured." Original error: ${error.toString()}`;
+      detailedErrorMessage = `Client-side API Login Error: "Failed to fetch from internal endpoint ${INTERNAL_LOGIN_ENDPOINT}. This usually means the Next.js server itself is not reachable, the API route is misconfigured, or there's a network issue." Original error: ${error.toString()}`;
     } else if (error instanceof Error) {
       detailedErrorMessage = error.message;
     }
@@ -92,6 +79,7 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
   }
 };
 
+
 // --- NOTE: The following functions (getDoctors, getAllCasesForDoctors, updateCaseStatus) ---
 // --- still make DIRECT calls to the EXTERNAL API. They will be subject to CORS if the ---
 // --- external API server (api.medibill.co.za) is not configured to allow requests ---
@@ -99,8 +87,15 @@ export const login = async (passwordFromForm: string): Promise<AuthToken> => {
 // --- If CORS issues persist for these, they would also need to be proxied. ---
 
 export const getDoctors = async (token: string): Promise<Doctor[]> => {
-  if (!EXTERNAL_API_BASE_URL_FROM_ENV || !EXTERNAL_API_BASE_URL_FROM_ENV.startsWith('http')) { throw new Error("EXTERNAL_API_BASE_URL_FROM_ENV not configured for getDoctors"); }
+  const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
+  if (!EXTERNAL_API_BASE_URL || typeof EXTERNAL_API_BASE_URL !== 'string' || !EXTERNAL_API_BASE_URL.startsWith('http')) {
+    const errorMsg = `Configuration error for getDoctors: NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL. Current value: '${EXTERNAL_API_BASE_URL}'.`;
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+  const DOCTORS_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/doctors`;
   console.log(`[MediBill API Client] Fetching doctors directly from: ${DOCTORS_ENDPOINT_EXTERNAL}`);
+
   try {
     const response = await fetch(DOCTORS_ENDPOINT_EXTERNAL, {
       headers: {
@@ -117,7 +112,6 @@ export const getDoctors = async (token: string): Promise<Doctor[]> => {
       throw new Error(errorMessage);
     }
     const data: Doctor[] = await response.json();
-    // Filter out test doctors
     return data.filter(doc => doc.practiceName && !doc.practiceName.toUpperCase().includes('TEST'));
   } catch (error) {
     console.error(`API getDoctors Error from ${DOCTORS_ENDPOINT_EXTERNAL}:`, error);
@@ -127,8 +121,15 @@ export const getDoctors = async (token: string): Promise<Doctor[]> => {
 };
 
 export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[]): Promise<Case[]> => {
-  if (!EXTERNAL_API_BASE_URL_FROM_ENV || !EXTERNAL_API_BASE_URL_FROM_ENV.startsWith('http')) { throw new Error("EXTERNAL_API_BASE_URL_FROM_ENV not configured for getAllCasesForDoctors"); }
+  const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
+  if (!EXTERNAL_API_BASE_URL || typeof EXTERNAL_API_BASE_URL !== 'string' || !EXTERNAL_API_BASE_URL.startsWith('http')) {
+    const errorMsg = `Configuration error for getAllCasesForDoctors: NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL. Current value: '${EXTERNAL_API_BASE_URL}'.`;
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+  const CASES_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases`;
   console.log(`[MediBill API Client] Fetching cases directly from: ${CASES_ENDPOINT_EXTERNAL}`);
+
   try {
     const response = await fetch(CASES_ENDPOINT_EXTERNAL, {
       headers: {
@@ -147,7 +148,7 @@ export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[
     const apiCases: ApiCase[] = await response.json();
     const relevantApiCases = apiCases.filter(apiCase =>
         apiCase.doctor_acc_no &&
-        doctorAccNos.length > 0 && 
+        doctorAccNos.length > 0 &&
         doctorAccNos.includes(apiCase.doctor_acc_no)
     );
     return relevantApiCases.map(processApiCase);
@@ -159,9 +160,16 @@ export const getAllCasesForDoctors = async (token: string, doctorAccNos: string[
 };
 
 export const updateCaseStatus = async (token: string, caseId: number, newStatus: CaseStatus): Promise<{ success: boolean; updatedCase?: Case }> => {
-  if (!EXTERNAL_API_BASE_URL_FROM_ENV || !EXTERNAL_API_BASE_URL_FROM_ENV.startsWith('http')) { throw new Error("EXTERNAL_API_BASE_URL_FROM_ENV not configured for updateCaseStatus"); }
+  const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
+  if (!EXTERNAL_API_BASE_URL || typeof EXTERNAL_API_BASE_URL !== 'string' || !EXTERNAL_API_BASE_URL.startsWith('http')) {
+    const errorMsg = `Configuration error for updateCaseStatus: NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL. Current value: '${EXTERNAL_API_BASE_URL}'.`;
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+  const UPDATE_CASE_STATUS_ENDPOINT_TEMPLATE_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases/{caseId}/status`;
   const url = UPDATE_CASE_STATUS_ENDPOINT_TEMPLATE_EXTERNAL.replace('{caseId}', caseId.toString());
   console.log(`[MediBill API Client] Updating case status directly for ID ${caseId} to ${newStatus} at: ${url}`);
+
   try {
     const response = await fetch(url, {
       method: 'PUT',
@@ -169,7 +177,7 @@ export const updateCaseStatus = async (token: string, caseId: number, newStatus:
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ case_status: newStatus }), 
+      body: JSON.stringify({ case_status: newStatus }),
     });
     if (!response.ok) {
        const errorText = await response.text();
@@ -190,12 +198,17 @@ export const updateCaseStatus = async (token: string, caseId: number, newStatus:
 };
 
 
-// Placeholder for potential future use if general case updates are needed
 export const updateCase = async (token: string, caseId: number, updatedCaseData: Partial<ApiCase>): Promise<Case> => {
-  if (!EXTERNAL_API_BASE_URL_FROM_ENV || !EXTERNAL_API_BASE_URL_FROM_ENV.startsWith('http')) { throw new Error("EXTERNAL_API_BASE_URL_FROM_ENV not configured for updateCase"); }
+  const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
+  if (!EXTERNAL_API_BASE_URL || typeof EXTERNAL_API_BASE_URL !== 'string' || !EXTERNAL_API_BASE_URL.startsWith('http')) {
+    const errorMsg = `Configuration error for updateCase: NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL. Current value: '${EXTERNAL_API_BASE_URL}'.`;
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  }
   // Assuming an endpoint like this for general updates. This would also be a direct external call.
-  const url = `${EXTERNAL_API_BASE_URL_FROM_ENV}/cases/submissions/update/${caseId}`; 
+  const url = `${EXTERNAL_API_BASE_URL}/cases/submissions/update/${caseId}`;
   console.log(`[MediBill API Client] Updating case ID ${caseId} directly at: ${url}`);
+
   try {
     const response = await fetch(url, {
       method: 'PUT',
