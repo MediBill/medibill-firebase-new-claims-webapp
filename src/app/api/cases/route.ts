@@ -51,11 +51,7 @@ export async function POST(request: NextRequest) {
       const responseDataText = await externalApiResponse.text();
 
       if (!externalApiResponse.ok) {
-        // Log specific error for this doctor but continue to try others
         console.error(`[API Cases Route] External API error for doctor ${accNo} from ${CASE_SUBMISSION_ENDPOINT_EXTERNAL} - Status: ${externalApiResponse.status}. Response: ${responseDataText.substring(0, 300)}...`);
-        // Optionally, if a 404 means "no case for this doctor", you might just continue without error.
-        // For other errors, you might want to collect them and report.
-        // For now, we'll just skip this doctor's case if there's an error.
         continue;
       }
 
@@ -63,31 +59,35 @@ export async function POST(request: NextRequest) {
       try {
         responseData = JSON.parse(responseDataText);
       } catch (jsonError) {
-        console.error(`[API Cases Route] Failed to parse JSON response for doctor ${accNo} from ${CASE_SUBMISSION_ENDPOINT_EXTERNAL}. Status: ${externalApiResponse.status}. Response: ${responseDataText.substring(0, 300)}...`);
-        continue; // Skip if response is not valid JSON
+        console.error(`[API Cases Route] Failed to parse JSON response for doctor ${accNo} from ${CASE_SUBMISSION_ENDPOINT_EXTERNAL}. Status: ${externalApiResponse.status}. Response Text: ${responseDataText.substring(0, 300)}...`);
+        continue;
       }
       
-      console.log(`[API Cases Route] Raw JSON response for doctor ${accNo} from ${CASE_SUBMISSION_ENDPOINT_EXTERNAL}: Status ${externalApiResponse.status}, Parsed Body: ${JSON.stringify(responseData).substring(0, 300)}...`);
+      console.log(`[API Cases Route] Raw JSON response for doctor ${accNo} from ${CASE_SUBMISSION_ENDPOINT_EXTERNAL}: Status ${externalApiResponse.status}, Parsed Body: ${JSON.stringify(responseData).substring(0, 500)}...`);
 
-      if (responseData.status === 'success' && responseData.case_submission && typeof responseData.case_submission === 'object') {
-        // Assuming case_submission is a single object as per your example
-        allCaseSubmissions.push(responseData.case_submission as ApiCase);
-      } else if (responseData.status === 'success' && Array.isArray(responseData.case_submission)) {
-        // If case_submission could be an array of cases for one doctor
-        allCaseSubmissions.push(...(responseData.case_submission as ApiCase[]));
-      } else if (responseData.status === 'success' && !responseData.case_submission) {
-        console.log(`[API Cases Route] Successfully fetched for doctor ${accNo}, but no 'case_submission' field found or it's empty.`);
-      }
-      else {
-        console.warn(`[API Cases Route] Fetched data for doctor ${accNo}, but status was not 'success' or case_submission was missing/malformed. Status: ${responseData.status}`);
+      // Enhanced logging for why a case might not be added:
+      if (responseData.status === 'success') {
+        if (responseData.case_submission && typeof responseData.case_submission === 'object' && !Array.isArray(responseData.case_submission)) {
+          console.log(`[API Cases Route] Doctor ${accNo}: SUCCESS, adding case_submission with ID: ${responseData.case_submission.id}`);
+          allCaseSubmissions.push(responseData.case_submission as ApiCase);
+        } else if (Array.isArray(responseData.case_submission)) {
+          // This case might be relevant if a single doctor ID could return multiple cases
+          console.log(`[API Cases Route] Doctor ${accNo}: SUCCESS, case_submission is an array with ${responseData.case_submission.length} items. Adding them.`);
+          allCaseSubmissions.push(...(responseData.case_submission as ApiCase[]));
+        } else if (!responseData.case_submission) {
+          console.log(`[API Cases Route] Doctor ${accNo}: SUCCESS, but 'case_submission' field is missing, null, or undefined.`);
+        } else {
+           console.log(`[API Cases Route] Doctor ${accNo}: SUCCESS, but 'case_submission' field is not a non-array object. Type: ${typeof responseData.case_submission}, Value: ${JSON.stringify(responseData.case_submission).substring(0,100)}...`);
+        }
+      } else {
+        console.warn(`[API Cases Route] Doctor ${accNo}: Data fetched but API status was not 'success'. Actual status: '${responseData.status}'. Full response: ${JSON.stringify(responseData).substring(0,300)}...`);
       }
 
     } catch (error) {
       console.error(`[API Cases Route] Internal error fetching case for doctor ${accNo} from ${CASE_SUBMISSION_ENDPOINT_EXTERNAL}:`, error);
-      // Continue to next doctor even if one fails
     }
   }
 
-  console.log(`[API Cases Route] Total case submissions fetched: ${allCaseSubmissions.length}`);
+  console.log(`[API Cases Route] Total case submissions fetched and aggregated: ${allCaseSubmissions.length}`);
   return NextResponse.json(allCaseSubmissions, { status: 200 });
 }
