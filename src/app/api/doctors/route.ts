@@ -1,14 +1,12 @@
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import type { Doctor } from '@/types/medibill';
+// import type { Doctor } from '@/types/medibill'; // Raw Doctor type not directly used here anymore
 
 // Hardcoded value for testing
 const EXTERNAL_API_BASE_URL = "https://api.medibill.co.za/api/v1";
 
 export async function GET(request: NextRequest) {
-  // Environment variable check is removed as value is hardcoded above
-
   const token = request.headers.get('Authorization')?.split('Bearer ')[1];
 
   if (!token) {
@@ -18,41 +16,49 @@ export async function GET(request: NextRequest) {
   console.log(`[API Doctors Route] Token received: ${token ? token.substring(0, 10) + '...' : 'null'}`);
 
   const DOCTORS_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/doctors`;
-  console.log(`[API Doctors Route] Proxied request to external API: ${DOCTORS_ENDPOINT_EXTERNAL}`);
+  console.log(`[API Doctors Route] Proxied GET request to external API: ${DOCTORS_ENDPOINT_EXTERNAL}`);
 
   try {
     const externalApiResponse = await fetch(DOCTORS_ENDPOINT_EXTERNAL, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        // 'Content-Type': 'application/json', // Content-Type not typically needed for GET
       },
     });
 
-    const responseData = await externalApiResponse.json();
-    console.log(`[API Doctors Route] Raw response from external API (${DOCTORS_ENDPOINT_EXTERNAL}): Status ${externalApiResponse.status}, Body: ${JSON.stringify(responseData).substring(0, 500)}...`);
-
+    const responseDataText = await externalApiResponse.text(); // Get text first for better error diagnosis
 
     if (!externalApiResponse.ok) {
-      console.error(`[API Doctors Route] External API error from ${DOCTORS_ENDPOINT_EXTERNAL} with status ${externalApiResponse.status}:`, responseData);
-      return NextResponse.json(
-        { message: responseData.message || responseData.detail || `External API error for doctors: ${externalApiResponse.status}` },
-        { status: externalApiResponse.status }
-      );
+      console.error(`[API Doctors Route] External API error from ${DOCTORS_ENDPOINT_EXTERNAL} with status ${externalApiResponse.status}: Response Text: ${responseDataText.substring(0, 500)}...`);
+      let message = `External API error for doctors: ${externalApiResponse.status}`;
+      try {
+        const errorJson = JSON.parse(responseDataText);
+        message = errorJson.message || errorJson.detail || message;
+      } catch (e) {
+        // If parsing fails, use the raw text if it's short, or a generic message
+        message = responseDataText.length < 300 ? responseDataText : message;
+      }
+      return NextResponse.json({ message }, { status: externalApiResponse.status });
     }
 
-    if (!Array.isArray(responseData)) {
-      console.error(`[API Doctors Route] External API at ${DOCTORS_ENDPOINT_EXTERNAL} did not return an array for doctors:`, responseData);
-      // Attempt to handle if doctors are nested, e.g. { "doctors": [...] }
-      if (responseData && typeof responseData === 'object' && Array.isArray((responseData as any).doctors)) {
-         console.log('[API Doctors Route] Found doctors in a "doctors" property, returning that array.');
-        return NextResponse.json((responseData as any).doctors, { status: 200 });
-      }
-      return NextResponse.json({ message: 'Received malformed doctor data from external API (expected an array).' }, { status: 502 }); // Bad Gateway
+    let responseData;
+    try {
+      responseData = JSON.parse(responseDataText);
+    } catch (jsonError) {
+      console.error(`[API Doctors Route] Failed to parse JSON response from ${DOCTORS_ENDPOINT_EXTERNAL}. Status: ${externalApiResponse.status}. Response Text: ${responseDataText.substring(0, 500)}...`);
+      return NextResponse.json({ message: 'Malformed JSON response from external doctors API.' }, { status: 502 });
     }
     
-    console.log(`[API Doctors Route] Successfully fetched and returning ${responseData.length} doctors.`);
-    return NextResponse.json(responseData, { status: 200 });
+    console.log(`[API Doctors Route] Raw response from external API (${DOCTORS_ENDPOINT_EXTERNAL}): Status ${externalApiResponse.status}, Body: ${JSON.stringify(responseData).substring(0, 500)}...`);
+
+    if (responseData && typeof responseData === 'object' && responseData.status === 'success' && Array.isArray(responseData.doctors)) {
+      console.log(`[API Doctors Route] Successfully fetched. Returning ${responseData.doctors.length} doctors from 'doctors' property.`);
+      return NextResponse.json(responseData.doctors, { status: 200 }); // Return the array of doctor objects
+    } else {
+      console.error(`[API Doctors Route] External API at ${DOCTORS_ENDPOINT_EXTERNAL} did not return the expected {status: "success", doctors: [...]} structure:`, responseData);
+      return NextResponse.json({ message: 'Received malformed doctor data structure from external API.' }, { status: 502 });
+    }
   } catch (error) {
     console.error('[API Doctors Route] Internal error during doctors proxy:', error);
     let message = 'Internal server error during doctors proxy.';
