@@ -27,8 +27,8 @@ export async function POST(request: NextRequest) {
     console.warn('[API Cases Route] Could not parse doctorAccNos from request body or body is not JSON. Fetching all cases for the user.');
   }
 
-  // Updated to use /cases/submissions/
-  const CASES_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases/submissions`;
+  // Updated to use /cases/submissions/ (with a trailing slash)
+  const CASES_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases/submissions/`;
   console.log(`[API Cases Route] Proxied GET request to external API: ${CASES_ENDPOINT_EXTERNAL}`);
 
   try {
