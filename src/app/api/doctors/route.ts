@@ -1,12 +1,15 @@
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-// import type { Doctor } from '@/types/medibill'; // Raw Doctor type not directly used here anymore
-
-// Hardcoded value for testing
-const EXTERNAL_API_BASE_URL = "https://api.medibill.co.za/api/v1";
 
 export async function GET(request: NextRequest) {
+  const EXTERNAL_API_BASE_URL = process.env.NEXT_PUBLIC_MEDIBILL_API_BASE_URL;
+
+  if (!EXTERNAL_API_BASE_URL || !EXTERNAL_API_BASE_URL.startsWith('http')) {
+    console.error('[API Doctors Route Error] NEXT_PUBLIC_MEDIBILL_API_BASE_URL is not a valid absolute URL:', EXTERNAL_API_BASE_URL);
+    return NextResponse.json({ message: 'Server configuration error: API base URL not set.' }, { status: 500 });
+  }
+
   const token = request.headers.get('Authorization')?.split('Bearer ')[1];
 
   if (!token) {
@@ -23,11 +26,10 @@ export async function GET(request: NextRequest) {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
-        // 'Content-Type': 'application/json', // Content-Type not typically needed for GET
       },
     });
 
-    const responseDataText = await externalApiResponse.text(); // Get text first for better error diagnosis
+    const responseDataText = await externalApiResponse.text(); 
 
     if (!externalApiResponse.ok) {
       console.error(`[API Doctors Route] External API error from ${DOCTORS_ENDPOINT_EXTERNAL} with status ${externalApiResponse.status}: Response Text: ${responseDataText.substring(0, 500)}...`);
@@ -36,7 +38,6 @@ export async function GET(request: NextRequest) {
         const errorJson = JSON.parse(responseDataText);
         message = errorJson.message || errorJson.detail || message;
       } catch (e) {
-        // If parsing fails, use the raw text if it's short, or a generic message
         message = responseDataText.length < 300 ? responseDataText : message;
       }
       return NextResponse.json({ message }, { status: externalApiResponse.status });
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
 
     if (responseData && typeof responseData === 'object' && responseData.status === 'success' && Array.isArray(responseData.doctors)) {
       console.log(`[API Doctors Route] Successfully fetched. Returning ${responseData.doctors.length} doctors from 'doctors' property.`);
-      return NextResponse.json(responseData.doctors, { status: 200 }); // Return the array of doctor objects
+      return NextResponse.json(responseData.doctors, { status: 200 });
     } else {
       console.error(`[API Doctors Route] External API at ${DOCTORS_ENDPOINT_EXTERNAL} did not return the expected {status: "success", doctors: [...]} structure:`, responseData);
       return NextResponse.json({ message: 'Received malformed doctor data structure from external API.' }, { status: 502 });
