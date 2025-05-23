@@ -16,8 +16,8 @@ interface AuthFormProps {
 }
 
 export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
-  // Password defaults to "Onejuly2021" as per user request
-  const [password, setPassword] = useState('Onejuly2021');
+  // Password defaults to an empty string
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,8 +26,8 @@ export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
     setIsLoading(true);
     setError(null);
     try {
-      // This password (default "Onejuly2021" or user input) is passed to loginApiCall
-      // The loginApiCall (in medibill-api.ts) will ignore this and use "apt@123!"
+      // This password (user input) is passed to loginApiCall
+      // The loginApiCall (in medibill-api.ts) will ignore this and use "apt@123!" internally for the external API call.
       const authToken = await loginApiCall(password);
       onLoginSuccess(authToken);
     } catch (err) {
@@ -57,6 +57,7 @@ export function AuthForm({ onLoginSuccess, loginApiCall }: AuthFormProps) {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
+                placeholder="Enter password"
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
