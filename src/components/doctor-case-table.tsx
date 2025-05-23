@@ -39,23 +39,19 @@ import { CaseDetailSheet } from "./case-detail-sheet";
 
 interface DoctorCaseTableProps {
   data: Case[];
-  // This prop now expects the full case update (token, caseId, payload)
   updateCaseApi: (token: string, caseId: number, payload: Partial<ApiCase>) => Promise<{ success: boolean; updatedCase?: Case }>;
-  authToken: string | null; // Auth token string
+  authToken: string | null;
   isLoading: boolean;
 }
 
-// Helper to map client-side Case object to the payload expected by the external API
 const mapCaseToApiCasePayload = (caseObj: Case, newStatus: CaseStatus): Partial<ApiCase> => {
   const { 
-    status, // client-side processed status
-    submittedDateTime, // client-side constructed field
-    original_case_status, // client-side tracking field
-    // any other fields specific to 'Case' type and not in 'ApiCase'
+    status,
+    submittedDateTime,
+    original_case_status,
     ...apiCompatibleFields 
   } = caseObj;
 
-  // Ensure all fields required by the API are present, even if null from source
   const payload: Partial<ApiCase> = {
     id: apiCompatibleFields.id,
     doctor_acc_no: apiCompatibleFields.doctor_acc_no,
@@ -83,7 +79,7 @@ const mapCaseToApiCasePayload = (caseObj: Case, newStatus: CaseStatus): Partial<
     referring_service_provider: apiCompatibleFields.referring_service_provider,
     referred_by_icd10: apiCompatibleFields.referred_by_icd10,
     asa_level: apiCompatibleFields.asa_level,
-    case_status: newStatus, // Set the case_status to the new desired status string
+    case_status: newStatus,
   };
   return payload;
 };
@@ -122,7 +118,6 @@ export function DoctorCaseTable({ data, updateCaseApi, authToken, isLoading: ini
     }
   };
 
-  // This function is called by columns.tsx and CaseDetailSheet.tsx
   const triggerCaseStatusUpdate = async (caseToUpdate: Case, newStatus: CaseStatus) => {
     if (!authToken) {
       toast({ title: "Error", description: "Authentication token not found.", variant: "destructive" });
@@ -136,17 +131,15 @@ export function DoctorCaseTable({ data, updateCaseApi, authToken, isLoading: ini
     setUpdatingStatusMap(prev => ({ ...prev, [caseToUpdate.id]: true }));
     
     const payloadForApi = mapCaseToApiCasePayload(caseToUpdate, newStatus);
-    console.log('[DoctorCaseTable] Payload for API update:', payloadForApi);
+    // console.log('[DoctorCaseTable] Payload for API update:', payloadForApi); // Removed for prod
 
     try {
-      // Call the prop which points to apiUpdateCase in page.tsx (which in turn calls lib/medibill-api#updateCase)
       const result = await updateCaseApi(authToken, caseToUpdate.id, payloadForApi); 
       
       if (result.success && result.updatedCase) {
         handleSuccessfulUpdateInTable(caseToUpdate.id, newStatus, result.updatedCase);
         toast({ title: "Success", description: `Case ID ${result.updatedCase.id} status updated to ${newStatus}.` });
       } else {
-        // Error message for failure will be based on what updateCaseApi (and ultimately updateCase in medibill-api) returns or throws
         throw new Error( "Failed to update status. API did not confirm success or provide updated case.");
       }
     } catch (error) {
@@ -158,7 +151,6 @@ export function DoctorCaseTable({ data, updateCaseApi, authToken, isLoading: ini
   
   const isUpdatingStatus = (caseId: number) => !!updatingStatusMap[caseId];
 
-  // Pass triggerCaseStatusUpdate, which expects the full case object and the new status string.
   const columns = React.useMemo(() => getColumns(triggerCaseStatusUpdate, isUpdatingStatus), [authToken, tableData, updatingStatusMap]); 
 
   const table = useReactTable({
@@ -282,12 +274,11 @@ export function DoctorCaseTable({ data, updateCaseApi, authToken, isLoading: ini
                   onClick={(event) => {
                     let target = event.target as HTMLElement;
                     let isInteractiveClick = false;
-                    // Check if the click originated from an interactive element within the row
                     while (target && target !== event.currentTarget) {
                         if (target.dataset.radixSelectTrigger !== undefined || 
                             target.closest('[data-radix-select-content]') !== null ||
                             target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'checkbox' ||
-                            target.closest('button:not([data-disables-row-click="true"])') !== null || // ensure button isn't specifically meant to NOT disable row click
+                            target.closest('button:not([data-disables-row-click="true"])') !== null || 
                             target.closest('[role="menuitem"]') !== null ) {
                             isInteractiveClick = true;
                             break;
@@ -330,12 +321,9 @@ export function DoctorCaseTable({ data, updateCaseApi, authToken, isLoading: ini
             <CaseDetailSheet 
               caseDetails={selectedCase} 
               onClose={() => setIsSheetOpen(false)}
-              // This prop now just signals the new status string
               onUpdateStatus={async (newStatus) => { 
                 if (selectedCase) {
-                  // Optimistically update sheet's view of the case
                   setSelectedCase(prev => prev ? {...prev, status: newStatus} : null);
-                  // Call the main handler in DoctorCaseTable to construct payload and make API call
                   await triggerCaseStatusUpdate(selectedCase, newStatus);
                 }
               }}

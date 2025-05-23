@@ -32,10 +32,10 @@ export async function PUT(request: NextRequest, { params }: CaseUpdateParams) {
     return NextResponse.json({ message: 'Invalid request body. Expected JSON with case data.' }, { status: 400 });
   }
 
-  const UPDATE_CASE_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/cases/submissions/update/${caseId}`;
+  const UPDATE_CASE_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL.replace(/\/$/, '')}/cases/submissions/update/${caseId}`;
 
   try {
-    console.log(`[API Case Update Route] Proxied PUT request for case ${caseId} to: ${UPDATE_CASE_ENDPOINT_EXTERNAL}`);
+    // console.log(`[API Case Update Route] Proxied PUT request for case ${caseId} to: ${UPDATE_CASE_ENDPOINT_EXTERNAL}`); // Removed for prod
     const externalApiResponse = await fetch(UPDATE_CASE_ENDPOINT_EXTERNAL, {
       method: 'PUT',
       headers: {
@@ -45,12 +45,10 @@ export async function PUT(request: NextRequest, { params }: CaseUpdateParams) {
       body: JSON.stringify(updatedCaseData),
     });
 
-    // Get response as text first for better error diagnosis if it's not JSON
     const responseDataText = await externalApiResponse.text();
 
     if (!externalApiResponse.ok) {
-      console.error(`[API Case Update Route] External API error from ${UPDATE_CASE_ENDPOINT_EXTERNAL} with status ${externalApiResponse.status}: ${responseDataText.substring(0, 500)}`);
-      // Try to parse as JSON for a structured error message, otherwise use text
+      console.error(`[API Case Update Route] External API error from ${UPDATE_CASE_ENDPOINT_EXTERNAL} with status ${externalApiResponse.status}: ${responseDataText.substring(0, 200)}`);
       let errorDetail = responseDataText;
       try {
         const errorJson = JSON.parse(responseDataText);
@@ -64,12 +62,10 @@ export async function PUT(request: NextRequest, { params }: CaseUpdateParams) {
 
     try {
       const responseData = JSON.parse(responseDataText);
-      console.log(`[API Case Update Route] Successfully updated case ${caseId} via external API. Response:`, responseData);
+      // console.log(`[API Case Update Route] Successfully updated case ${caseId} via external API. Response:`, responseData); // Removed for prod
       return NextResponse.json(responseData, { status: 200 });
     } catch (jsonError) {
-        // This case might happen if the external API returns 200 OK but with non-JSON or empty body
-        console.warn(`[API Case Update Route] Case ${caseId} updated successfully (status ${externalApiResponse.status}), but response body was not valid JSON: ${responseDataText.substring(0,500)}`);
-        // Depending on API contract, you might return a generic success or the raw text
+        console.warn(`[API Case Update Route] Case ${caseId} updated successfully (status ${externalApiResponse.status}), but response body was not valid JSON: ${responseDataText.substring(0,200)}`);
         return NextResponse.json({ message: "Case updated successfully, but confirmation response was not valid JSON.", rawResponse: responseDataText }, { status: 200 });
     }
 

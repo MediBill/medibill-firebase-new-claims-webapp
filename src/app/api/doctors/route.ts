@@ -16,10 +16,10 @@ export async function GET(request: NextRequest) {
     console.warn('[API Doctors Route] Authorization token is missing from request headers.');
     return NextResponse.json({ message: 'Authorization token is missing.' }, { status: 401 });
   }
-  console.log(`[API Doctors Route] Token received: ${token ? token.substring(0, 10) + '...' : 'null'}`);
+  // console.log(`[API Doctors Route] Token received: ${token ? token.substring(0, 10) + '...' : 'null'}`); // Removed for prod
 
-  const DOCTORS_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL}/doctors`;
-  console.log(`[API Doctors Route] Proxied GET request to external API: ${DOCTORS_ENDPOINT_EXTERNAL}`);
+  const DOCTORS_ENDPOINT_EXTERNAL = `${EXTERNAL_API_BASE_URL.replace(/\/$/, '')}/doctors`;
+  // console.log(`[API Doctors Route] Proxied GET request to external API: ${DOCTORS_ENDPOINT_EXTERNAL}`); // Removed for prod
 
   try {
     const externalApiResponse = await fetch(DOCTORS_ENDPOINT_EXTERNAL, {
@@ -29,16 +29,17 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const responseDataText = await externalApiResponse.text(); 
+    const responseDataText = await externalApiResponse.text();
 
     if (!externalApiResponse.ok) {
-      console.error(`[API Doctors Route] External API error from ${DOCTORS_ENDPOINT_EXTERNAL} with status ${externalApiResponse.status}: Response Text: ${responseDataText.substring(0, 500)}...`);
+      console.error(`[API Doctors Route] External API error from ${DOCTORS_ENDPOINT_EXTERNAL} with status ${externalApiResponse.status}: Response Text: ${responseDataText.substring(0, 200)}...`);
       let message = `External API error for doctors: ${externalApiResponse.status}`;
       try {
         const errorJson = JSON.parse(responseDataText);
         message = errorJson.message || errorJson.detail || message;
       } catch (e) {
-        message = responseDataText.length < 300 ? responseDataText : message;
+        // Keep message as is or use short part of responseDataText if not too long
+        message = responseDataText.length < 100 ? responseDataText : message;
       }
       return NextResponse.json({ message }, { status: externalApiResponse.status });
     }
@@ -47,14 +48,14 @@ export async function GET(request: NextRequest) {
     try {
       responseData = JSON.parse(responseDataText);
     } catch (jsonError) {
-      console.error(`[API Doctors Route] Failed to parse JSON response from ${DOCTORS_ENDPOINT_EXTERNAL}. Status: ${externalApiResponse.status}. Response Text: ${responseDataText.substring(0, 500)}...`);
+      console.error(`[API Doctors Route] Failed to parse JSON response from ${DOCTORS_ENDPOINT_EXTERNAL}. Status: ${externalApiResponse.status}. Response Text: ${responseDataText.substring(0, 200)}...`);
       return NextResponse.json({ message: 'Malformed JSON response from external doctors API.' }, { status: 502 });
     }
-    
-    console.log(`[API Doctors Route] Raw response from external API (${DOCTORS_ENDPOINT_EXTERNAL}): Status ${externalApiResponse.status}, Body: ${JSON.stringify(responseData).substring(0, 500)}...`);
+
+    // console.log(`[API Doctors Route] Raw response from external API (${DOCTORS_ENDPOINT_EXTERNAL}): Status ${externalApiResponse.status}, Body: ${JSON.stringify(responseData).substring(0, 200)}...`); // Removed for prod
 
     if (responseData && typeof responseData === 'object' && responseData.status === 'success' && Array.isArray(responseData.doctors)) {
-      console.log(`[API Doctors Route] Successfully fetched. Returning ${responseData.doctors.length} doctors from 'doctors' property.`);
+      // console.log(`[API Doctors Route] Successfully fetched. Returning ${responseData.doctors.length} doctors from 'doctors' property.`); // Removed for prod
       return NextResponse.json(responseData.doctors, { status: 200 });
     } else {
       console.error(`[API Doctors Route] External API at ${DOCTORS_ENDPOINT_EXTERNAL} did not return the expected {status: "success", doctors: [...]} structure:`, responseData);
